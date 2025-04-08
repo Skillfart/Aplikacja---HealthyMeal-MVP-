@@ -1,9 +1,13 @@
 ---
 description: 
 globs: 
+alwaysApply: false
+---
+---
+description: 
+globs: 
 alwaysApply: true
 ---
-# AI Rules for {{project-name}}
+# AI Rules for healthymeal
 
-{{project-description}}
 
