@@ -1,0 +1,18 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## Coding practices
+
+### Guidelines for Documentation
+
+#### Storybook
+
+- Organize stories by component hierarchy to mirror the application structure
+- Implement comprehensive controls to showcase component variations for {{component_types}}
+- Use MDX format to combine documentation and live examples for complex components
+- Configure Storybook addons for accessibility, responsive design, and {{specific_testing_needs}}
+- Implement design token integration to showcase components with different themes
+- Create interaction tests to verify component behavior in addition to visual appearance
+

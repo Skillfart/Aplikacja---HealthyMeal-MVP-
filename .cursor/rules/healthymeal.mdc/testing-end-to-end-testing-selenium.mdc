@@ -1,0 +1,15 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## Testing
+
+### Guidelines for End-to-End Testing
+
+#### Selenium
+
+- Use the page object model to organize test code
+- Implement explicit waits instead of implicit waits for {{dynamic_elements}}
+- Use the WebDriverWait class for waiting for elements to be ready
+

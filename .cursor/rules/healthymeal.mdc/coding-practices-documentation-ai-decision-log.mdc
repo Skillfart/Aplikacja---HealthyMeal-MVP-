@@ -1,0 +1,15 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## Coding practices
+
+### Guidelines for Documentation
+
+#### AI Decision Log
+
+- Update relevant documentation in /docs when modifying features
+- Keep README.md in sync with new capabilities
+- Maintain changelog entries in CHANGELOG.md
+
