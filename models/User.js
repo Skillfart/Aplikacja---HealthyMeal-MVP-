@@ -1,14 +1,12 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
     unique: true,
-    trim: true,
-    lowercase: true,
-    match: [/^\S+@\S+\.\S+$/, 'Podaj prawidłowy adres email']
+    match: /^.+@.+\..+$/
   },
   password: {
     type: String,
@@ -23,17 +21,18 @@ const userSchema = new mongoose.Schema({
     },
     maxCarbs: {
       type: Number,
-      default: 0,
-      min: 0
+      min: 0,
+      default: 0
     },
-    excludedProducts: [{
-      type: String,
-      trim: true
-    }],
-    allergens: [{
-      type: String,
-      enum: ['gluten', 'dairy', 'nuts', 'eggs', 'soy', 'shellfish', 'fish', 'peanuts']
-    }]
+    excludedProducts: {
+      type: [String],
+      default: []
+    },
+    allergens: {
+      type: [String],
+      enum: ['gluten', 'dairy', 'nuts', 'eggs', 'soy', 'shellfish', 'fish', 'peanuts'],
+      default: []
+    }
   },
   aiUsage: {
     date: {
@@ -51,62 +50,47 @@ const userSchema = new mongoose.Schema({
     default: true
   },
   lastLogin: {
-    type: Date
+    type: Date,
+    default: Date.now
   }
 }, {
   timestamps: true
 });
 
-// Middleware do hashowania hasła przed zapisem
+// Metody dla modelu User
 userSchema.pre('save', async function(next) {
-  // Jeśli hasło nie zostało zmodyfikowane, przejdź dalej
-  if (!this.isModified('password')) {
-    return next();
+  // Jeśli hasło zostało zmienione, hashujemy je
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 10);
   }
   
-  try {
-    // Wygeneruj salt
-    const salt = await bcrypt.genSalt(10);
-    
-    // Hashuj hasło z wygenerowanym saltem
-    this.password = await bcrypt.hash(this.password, salt);
-    
-    // Resetowanie licznika AI jeśli data jest starsza niż dzisiaj
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    if (!this.aiUsage.date || this.aiUsage.date < today) {
-      this.aiUsage.date = today;
-      this.aiUsage.count = 0;
-    }
-    
-    next();
-  } catch (error) {
-    next(error);
+  // Obsługa resetu licznika AI
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+  if (!this.aiUsage.date || this.aiUsage.date < today) {
+    this.aiUsage.date = today;
+    this.aiUsage.count = 0;
   }
+  
+  next();
 });
 
-// Metoda do porównywania hasła
+// Metoda do porównywania haseł
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Metoda sprawdzająca, czy użytkownik ma jeszcze dostępne modyfikacje AI
-userSchema.methods.hasRemainingAIModifications = function() {
+// Metoda sprawdzająca dostępne limity AI
+userSchema.methods.hasRemainingAIModifications = function(dailyLimit) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   
-  // Resetowanie licznika jeśli data jest starsza niż dzisiaj
   if (!this.aiUsage.date || this.aiUsage.date < today) {
-    this.aiUsage.date = today;
-    this.aiUsage.count = 0;
     return true;
   }
   
-  // Sprawdź, czy użytkownik nie przekroczył limitu (5 modyfikacji dziennie)
-  return this.aiUsage.count < 5;
+  return this.aiUsage.count < dailyLimit;
 };
 
-const User = mongoose.model('User', userSchema);
-
-module.exports = User; 
+module.exports = mongoose.model('User', userSchema); 

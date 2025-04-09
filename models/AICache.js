@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
+const config = require('../config/env');
 
 const aiCacheSchema = new mongoose.Schema({
   inputHash: {
@@ -8,37 +8,53 @@ const aiCacheSchema = new mongoose.Schema({
     unique: true
   },
   recipeId: {
-    type: Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Recipe',
     required: true
   },
   userPreferences: {
     dietType: {
-      type: String
+      type: String,
+      enum: ['normal', 'keto', 'lowCarb', 'paleo', 'vegetarian', 'vegan', 'glutenFree', 'dairyFree'],
+      required: true
     },
     maxCarbs: {
-      type: Number
+      type: Number,
+      min: 0,
+      required: true
     },
-    excludedProducts: [{
-      type: String
-    }],
-    allergens: [{
-      type: String
-    }]
+    excludedProducts: {
+      type: [String],
+      default: []
+    },
+    allergens: {
+      type: [String],
+      enum: ['gluten', 'dairy', 'nuts', 'eggs', 'soy', 'shellfish', 'fish', 'peanuts'],
+      default: []
+    }
   },
   response: {
-    ingredients: {
-      type: Array
-    },
-    steps: {
-      type: Array
-    },
+    title: String,
+    ingredients: [{
+      ingredient: {
+        name: String
+      },
+      quantity: Number,
+      unit: String,
+      isModified: Boolean,
+      substitutionReason: String
+    }],
+    steps: [{
+      number: Number,
+      description: String,
+      isModified: Boolean,
+      modificationReason: String
+    }],
     nutritionalValues: {
-      type: Object
+      totalCarbs: Number,
+      carbsReduction: Number
     },
-    changesDescription: {
-      type: String
-    }
+    changesDescription: String
   },
   createdAt: {
     type: Date,
@@ -47,18 +63,17 @@ const aiCacheSchema = new mongoose.Schema({
   expiresAt: {
     type: Date,
     default: function() {
-      // Domyślnie wpis wygasa po 24 godzinach od utworzenia
       const date = new Date();
-      date.setHours(date.getHours() + 24);
+      date.setHours(date.getHours() + config.CACHE_TTL_HOURS);
       return date;
-    },
-    index: { expires: 0 } // TTL indeks
+    }
   }
 });
 
-// Indeks dla szybkiego wyszukiwania
-aiCacheSchema.index({ "inputHash": 1 }, { unique: true });
+// Indeks TTL dla automatycznego usuwania wpisów
+aiCacheSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-const AICache = mongoose.model('AICache', aiCacheSchema);
+// Unikalny indeks dla inputHash
+aiCacheSchema.index({ inputHash: 1 }, { unique: true });
 
-module.exports = AICache; 
+module.exports = mongoose.model('AICache', aiCacheSchema); 
