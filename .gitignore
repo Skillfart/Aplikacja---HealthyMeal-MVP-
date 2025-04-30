@@ -1,0 +1,73 @@
+# Zależności
+node_modules/
+/.pnp
+.pnp.js
+yarn.lock
+package-lock.json
+
+# Zmienne środowiskowe
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Katalogi budowania/kompilacji
+/build/
+/dist/
+/out/
+/coverage/
+/.next/
+
+# Logi
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE i edytory
+/.idea/
+/.vscode/
+*.swp
+*.swo
+.DS_Store
+.vscode
+*.sublime-project
+*.sublime-workspace
+
+# Pliki tymczasowe
+.tmp/
+.temp/
+*.tmp
+*.temp
+.cache/
+.parcel-cache/
+
+# Pliki systemowe
+.DS_Store
+Thumbs.db
+
+# Pliki testowe/debugowania
+coverage/
+.nyc_output/
+cypress/videos/
+cypress/screenshots/
+
+# Katalogi specyficzne dla projektu
+/uploads/
+/healthymeal/frontend/node_modules/
+/healthymeal/backend/node_modules/
+/healthymeal/frontend/build/
+/healthymeal/backend/dist/
+
+# MongoDB
+*.dump
+/data/db/
+
+# Pliki zgenerowane automatycznie
+/healthymeal/frontend/src/types/auto-generated/
+/healthymeal/backend/src/types/auto-generated/
+
+# Pliki konfiguracyjne lokalnego developera
+.eslintcache 

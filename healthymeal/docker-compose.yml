@@ -1,0 +1,63 @@
+version: '3'
+
+services:
+  mongodb:
+    image: mongo:5.0
+    container_name: healthymeal-mongo
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: healthymeal
+
+  backend:
+    build: ./backend
+    container_name: healthymeal-backend
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - mongodb
+    ports:
+      - "3030:3030"
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongodb:27017/healthymeal
+      - JWT_SECRET=healthymeal-secret-key
+      - PORT=3030
+      - RUN_TESTS=true
+    command: npm run dev
+
+  frontend:
+    build: ./frontend
+    container_name: healthymeal-frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:3030/api
+      - REACT_APP_RUN_TESTS=true
+    command: npm run dev
+
+  tests:
+    build: ./tests
+    container_name: healthymeal-tests
+    volumes:
+      - ./tests:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+      - frontend
+    environment:
+      - API_URL=http://backend:3030/api
+      - FRONTEND_URL=http://frontend:3000
+    command: npm run test:all
+
+volumes:
+  mongodb_data: 

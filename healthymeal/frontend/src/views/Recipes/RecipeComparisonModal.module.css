@@ -1,0 +1,461 @@
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modalContent {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 1000px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  padding: 15px 20px;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f8f9fa;
+}
+
+.modalHeader h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: #777;
+  transition: color 0.2s;
+}
+
+.closeButton:hover {
+  color: #333;
+}
+
+.modalBody {
+  padding: 20px;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+/* Sekcja tytułów */
+.titleComparison {
+  display: flex;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.originalColumn, 
+.modifiedColumn {
+  flex: 1;
+  padding: 15px;
+}
+
+.originalColumn {
+  background-color: #f5f5f5;
+}
+
+.modifiedColumn {
+  background-color: #f0f7ff;
+}
+
+.titleComparison h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 1.3rem;
+  color: #444;
+}
+
+.titleComparison p {
+  margin: 0;
+  color: #666;
+  font-size: 0.95rem;
+}
+
+/* Sekcje porównania */
+.comparisonSection {
+  margin-bottom: 25px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.comparisonSection h4 {
+  margin: 0;
+  padding: 12px 20px;
+  font-size: 1.1rem;
+  background-color: #f2f2f2;
+  color: #444;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+/* Wartości odżywcze */
+.nutritionComparison {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 15px;
+  background-color: #fff;
+}
+
+.nutritionItem {
+  width: 50%;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.nutritionName {
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #444;
+}
+
+.nutritionValues {
+  display: flex;
+  align-items: center;
+}
+
+.nutritionOriginal {
+  width: 80px;
+  text-align: right;
+  padding-right: 10px;
+  color: #666;
+}
+
+.nutritionArrow {
+  margin: 0 10px;
+  color: #999;
+}
+
+.nutritionModified {
+  display: flex;
+  align-items: center;
+}
+
+.diffPercentage {
+  margin-left: 8px;
+  font-size: 0.85em;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+.nutritionGood {
+  color: #2e7d32;
+}
+
+.nutritionGood .diffPercentage {
+  background-color: #e8f5e9;
+}
+
+.nutritionBad {
+  color: #c62828;
+}
+
+.nutritionBad .diffPercentage {
+  background-color: #ffebee;
+}
+
+/* Składniki */
+.ingredientsComparison {
+  padding: 15px;
+  background-color: #fff;
+}
+
+.ingredientHeader, .stepsHeader {
+  display: flex;
+  margin-bottom: 15px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+  font-weight: bold;
+}
+
+.originalColumnHeader, .modifiedColumnHeader, .statusColumnHeader {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.originalColumnHeader, .modifiedColumnHeader {
+  flex: 1;
+}
+
+.statusColumnHeader {
+  width: 40px;
+  text-align: center;
+}
+
+.ingredientItem {
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.ingredientModified {
+  background-color: #fff9c4;
+}
+
+.ingredientAdded {
+  background-color: #e8f5e9;
+}
+
+.ingredientRemoved {
+  background-color: #ffebee;
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+
+.ingredientUnchanged {
+  background-color: #f5f5f5;
+}
+
+.ingredientName {
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.ingredientColumns {
+  display: flex;
+  align-items: center;
+}
+
+.originalColumn, 
+.modifiedColumn {
+  flex: 1;
+}
+
+.statusColumn {
+  width: 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.unchangedIcon {
+  color: #757575;
+}
+
+.modifiedIcon {
+  color: #ffa000;
+}
+
+.addedIcon {
+  color: #2e7d32;
+}
+
+.removedIcon {
+  color: #c62828;
+}
+
+.substitutionReason {
+  font-size: 0.85rem;
+  color: #757575;
+  margin-top: 5px;
+  padding-left: 10px;
+  border-left: 2px solid #ffa000;
+  font-style: italic;
+}
+
+/* Kroki przygotowania */
+.stepsComparison {
+  padding: 15px;
+  background-color: #fff;
+}
+
+.stepItem {
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.stepModified {
+  background-color: #fff9c4;
+}
+
+.stepAdded {
+  background-color: #e8f5e9;
+}
+
+.stepRemoved {
+  background-color: #ffebee;
+  text-decoration: line-through;
+  opacity: 0.8;
+}
+
+.stepUnchanged {
+  background-color: #f5f5f5;
+}
+
+.stepColumns {
+  display: flex;
+}
+
+.stepNumber {
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.stepContent {
+  display: flex;
+  align-items: flex-start;
+}
+
+.stepDescription {
+  flex: 1;
+}
+
+.modificationReason {
+  font-size: 0.85rem;
+  color: #757575;
+  margin-top: 5px;
+  padding-left: 10px;
+  border-left: 2px solid #ffa000;
+  font-style: italic;
+}
+
+/* Podsumowanie zmian */
+.summaryContainer {
+  padding: 15px;
+  background-color: #fff;
+}
+
+.summaryStats {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+
+.statItem {
+  width: 50%;
+  padding: 8px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.statLabel {
+  color: #555;
+}
+
+.statValue {
+  background-color: #f2f2f2;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #333;
+  min-width: 30px;
+  text-align: center;
+}
+
+/* Footer */
+.modalFooter {
+  padding: 15px 20px;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background-color: #f8f9fa;
+}
+
+.closeButton, 
+.saveButton {
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.closeButton {
+  background-color: #f2f2f2;
+  color: #555;
+  border: 1px solid #ddd;
+}
+
+.closeButton:hover {
+  background-color: #e0e0e0;
+}
+
+.saveButton {
+  background-color: #2e7d32;
+  color: white;
+  border: none;
+}
+
+.saveButton:hover {
+  background-color: #1b5e20;
+}
+
+/* Responsywność */
+@media (max-width: 768px) {
+  .modalContent {
+    width: 95%;
+    max-height: 95vh;
+  }
+  
+  .titleComparison {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .nutritionComparison {
+    grid-template-columns: 1fr;
+  }
+  
+  .stepsContainer {
+    flex-direction: column;
+  }
+  
+  .stepArrow {
+    transform: rotate(90deg);
+    padding: 8px;
+  }
+  
+  .stepOriginal {
+    border-right: none;
+    border-bottom: 1px solid #eaeaea;
+  }
+  
+  .modalFooter {
+    flex-direction: column-reverse;
+  }
+  
+  .closeModalButton, .saveButton {
+    width: 100%;
+  }
+}
+
+/* Puste stany */
+.noNutrition, .noSteps {
+  padding: 15px;
+  text-align: center;
+  color: #666;
+  font-style: italic;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  margin: 10px 0;
+}
+
+.noNutrition p, .noSteps p {
+  margin: 5px 0;
+} 

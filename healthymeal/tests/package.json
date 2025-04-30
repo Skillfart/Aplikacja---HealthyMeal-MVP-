@@ -1,0 +1,27 @@
+{
+  "name": "healthymeal-tests",
+  "version": "1.0.0",
+  "description": "Testy dla aplikacji HealthyMeal",
+  "scripts": {
+    "test:unit": "mocha unit/**/*.test.js",
+    "test:integration": "mocha integration/**/*.test.js",
+    "test:performance": "mocha performance/**/*.test.js",
+    "test:e2e": "mocha e2e/**/*.test.js",
+    "test": "mocha unit/**/*.test.js integration/**/*.test.js performance/**/*.test.js e2e/**/*.test.js",
+    "test:all": "node run-all-tests.js",
+    "test:ci": "mocha --reporter=min unit/**/*.test.js",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
+    "postinstall": "echo 'Testy zostały zainstalowane. Użyj npm test:all by uruchomić wszystkie testy.'"
+  },
+  "dependencies": {
+    "axios": "^1.9.0",
+    "chai": "^4.3.7",
+    "dotenv": "^16.5.0",
+    "mocha": "^10.2.0",
+    "mongoose": "^7.6.3",
+    "openai": "^4.96.0",
+    "sinon": "^15.0.3",
+    "supertest": "^6.3.3"
+  }
+}

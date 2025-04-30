@@ -1,44 +1,42 @@
 {
   "name": "healthymeal-backend",
-  "version": "0.1.0",
-  "description": "Backend for HealthyMeal recipe modification application",
-  "main": "dist/server.js",
+  "version": "1.0.0",
+  "description": "Backend dla aplikacji HealthyMeal",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
-    "test": "jest",
-    "test:watch": "jest --watch"
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "dev:test": "npm run test:quick && nodemon src/server.js",
+    "test": "mocha src/tests/**/*.test.js",
+    "test:e2e": "mocha src/tests/e2e/**/*.test.js",
+    "test:unit": "mocha src/tests/unit/**/*.test.js",
+    "test:integration": "mocha src/tests/integration/**/*.test.js",
+    "test:quick": "mocha --reporter=min src/tests/unit/**/*.test.js",
+    "test:openrouter": "node src/scripts/test-openrouter.js",
+    "lint": "eslint src/**/*.js",
+    "dev:all": "npm run test:quick && echo \"Uruchamianie backendu na porcie 3030. Otwórz nowe okno terminala i uruchom: cd ../frontend && npm start\" && nodemon src/server.js",
+    "prestart": "npm run test:quick"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.38.0",
     "axios": "^1.6.2",
-    "bcryptjs": "^2.4.3",
+    "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "express-async-errors": "^3.1.1",
-    "joi": "^17.11.0",
+    "express-validator": "^7.2.1",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^7.6.3",
-    "redis": "^4.6.10",
-    "@sentry/node": "^7.80.1",
-    "@sentry/tracing": "^7.80.1"
+    "mongoose": "^8.0.1",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.96.0"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/cors": "^2.8.16",
-    "@types/express": "^4.17.21",
-    "@types/jest": "^29.5.8",
-    "@types/jsonwebtoken": "^9.0.5",
-    "@types/node": "^20.9.0",
-    "@types/supertest": "^2.0.16",
-    "jest": "^29.7.0",
-    "supertest": "^6.3.3",
-    "ts-jest": "^29.1.1",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.2.2"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "chai": "^4.3.10",
+    "chai-http": "^4.4.0",
+    "eslint": "^8.54.0",
+    "mocha": "^10.2.0",
+    "nodemon": "^3.1.10"
   }
 }

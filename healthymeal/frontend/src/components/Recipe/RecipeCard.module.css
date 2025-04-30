@@ -1,0 +1,9 @@
+.compareButton {
+  background-color: #3f51b5;
+  border-color: #3f51b5;
+}
+
+.compareButton:hover {
+  background-color: #303f9f;
+  border-color: #303f9f;
+} 
