@@ -1,104 +1,137 @@
 # HealthyMeal Backend
 
-Backend aplikacji HealthyMeal zapewniający API RESTful dla aplikacji frontendowej.
+Backend dla aplikacji HealthyMeal, napisany w Node.js z Express i MongoDB.
+
+## Wymagania
+
+- Node.js >= 18.0.0
+- MongoDB >= 5.0
+- Supabase (dla autoryzacji)
+- OpenAI API (dla generowania przepisów)
 
 ## Instalacja
 
-1. Zainstaluj zależności:
+1. Sklonuj repozytorium:
+```bash
+git clone https://github.com/twoje-repo/healthymeal.git
+cd healthymeal/backend
+```
+
+2. Zainstaluj zależności:
 ```bash
 npm install
 ```
 
-2. Utwórz plik `.env` na podstawie `.env.example`:
+3. Skopiuj plik `.env.example` do `.env` i uzupełnij zmienne środowiskowe:
 ```bash
 cp .env.example .env
 ```
 
-3. Dostosuj zmienne środowiskowe w pliku `.env`:
-```
-PORT=3030
-MONGODB_URI=mongodb://localhost:27017/healthymeal
-JWT_SECRET=twój-sekretny-klucz
-OPENROUTER_API_KEY=klucz-api-openrouter
-```
-
-## Integracja z OpenRouter API
-
-Aplikacja korzysta z OpenRouter API do generowania modyfikacji przepisów i sugerowania alternatywnych składników. Aby ta funkcjonalność działała poprawnie, należy:
-
-1. Zarejestrować się na [OpenRouter](https://openrouter.ai/) i uzyskać klucz API
-
-2. Ustawić klucz API w pliku `.env`:
-```
-OPENROUTER_API_KEY=twój-klucz-openrouter
-```
-
-3. Upewnić się, że pakiet OpenAI jest zainstalowany:
-```bash
-npm install openai
-```
-
-W przypadku braku klucza API lub problemów z połączeniem, aplikacja będzie działać w trybie symulacji, zwracając przykładowe dane.
-
-## Uruchamianie
-
-### Tryb deweloperski
+4. Uruchom serwer w trybie deweloperskim:
 ```bash
 npm run dev
 ```
 
-### Tryb produkcyjny
-```bash
-npm start
+## Struktura projektu
+
 ```
+src/
+├── app.js              # Główny plik aplikacji
+├── config/             # Konfiguracja
+│   ├── database.js     # Konfiguracja MongoDB
+│   └── env.js         # Zmienne środowiskowe
+├── controllers/        # Kontrolery
+│   └── recipeController.js
+├── middleware/         # Middleware
+│   └── auth.js        # Autoryzacja
+├── models/            # Modele MongoDB
+│   ├── User.js
+│   ├── Recipe.js
+│   └── AiResponse.js
+├── routes/            # Trasy
+│   └── recipeRoutes.js
+└── utils/             # Narzędzia
+    └── logger.js      # Logger
+```
+
+## API Endpoints
+
+### Przepisy
+
+- `GET /api/recipes` - Pobierz wszystkie przepisy użytkownika
+- `GET /api/recipes/search` - Wyszukaj przepisy
+- `GET /api/recipes/:id` - Pobierz pojedynczy przepis
+- `POST /api/recipes` - Utwórz nowy przepis
+- `PUT /api/recipes/:id` - Zaktualizuj przepis
+- `DELETE /api/recipes/:id` - Usuń przepis
+- `POST /api/recipes/:id/modify-with-ai` - Modyfikuj przepis za pomocą AI
+
+## Autoryzacja
+
+Aplikacja używa Supabase do autoryzacji. Token JWT musi być przekazany w nagłówku `Authorization` w formacie:
+```
+Authorization: Bearer <token>
+```
+
+## Limity
+
+- Limit zapytań API: 100 na 15 minut
+- Limit zapytań AI: 5 na dzień na użytkownika
+- Maksymalny rozmiar żądania: 10MB
+
+## Cache
+
+Odpowiedzi AI są cachowane przez 7 dni.
 
 ## Testy
 
-### Uruchamianie testów jednostkowych
 ```bash
+# Uruchom wszystkie testy
 npm test
+
+# Uruchom linter
+npm run lint
+
+# Formatuj kod
+npm run format
 ```
 
-### Uruchamianie testów e2e
-```bash
-npm run test:e2e
-```
+## Środowiska
 
-## Struktura projektu
+- Development: `.env.development`
+- Production: `.env`
 
-- `src/` - Kod źródłowy
-  - `controllers/` - Kontrolery dla różnych zasobów
-  - `models/` - Modele danych Mongoose
-  - `routes/` - Definicje tras API
-  - `middleware/` - Middleware Express (np. autentykacja)
-  - `services/` - Serwisy (np. OpenRouter, limity API)
-  - `errors/` - Klasy obsługi błędów
-  - `app.js` - Konfiguracja aplikacji Express
-  - `server.js` - Punkt wejściowy aplikacji
+## Zmienne środowiskowe
 
-## Dokumentacja API
+- `NODE_ENV` - Środowisko (development/production)
+- `PORT` - Port serwera
+- `MONGODB_URI` - URI do MongoDB
+- `SUPABASE_URL` - URL do Supabase
+- `SUPABASE_SERVICE_KEY` - Klucz serwisowy Supabase
+- `OPENAI_API_KEY` - Klucz API OpenAI
+- `CORS_ORIGIN` - Dozwolone pochodzenie dla CORS
+- `AI_DAILY_LIMIT` - Dzienny limit zapytań AI
+- `CACHE_ENABLED` - Włącz/wyłącz cache
+- `CACHE_TTL` - Czas życia cache w sekundach
+- `LOG_LEVEL` - Poziom logowania
+- `SECURITY_ENABLED` - Włącz/wyłącz zabezpieczenia
 
-### Endpointy API
+## Bezpieczeństwo
 
-#### Autoryzacja
-- `POST /api/auth/register` - Rejestracja nowego użytkownika
-- `POST /api/auth/login` - Logowanie użytkownika
+- Helmet dla zabezpieczeń HTTP
+- Rate limiting
+- Sanityzacja danych MongoDB
+- CORS
+- Kompresja odpowiedzi
 
-#### Użytkownicy
-- `GET /api/users/me` - Pobranie danych aktualnego użytkownika
-- `PUT /api/users/me` - Aktualizacja danych użytkownika
-- `PUT /api/users/me/preferences` - Aktualizacja preferencji dietetycznych
+## Logowanie
 
-#### Przepisy
-- `GET /api/recipes` - Pobranie listy przepisów
-- `GET /api/recipes/:id` - Pobranie szczegółów przepisu
-- `POST /api/recipes` - Utworzenie nowego przepisu
-- `PUT /api/recipes/:id` - Aktualizacja przepisu
-- `DELETE /api/recipes/:id` - Usunięcie przepisu
+Logi są zapisywane w katalogu `logs/`:
+- `error.log` - Błędy
+- `combined.log` - Wszystkie logi
 
-#### AI
-- `GET /api/ai/usage` - Pobranie informacji o limitach AI
-- `GET /api/ai/status` - Sprawdzenie statusu API OpenRouter
-- `POST /api/ai/modify/:recipeId` - Modyfikacja przepisu na podstawie preferencji
-- `GET /api/ai/alternatives/:recipeId` - Sugestie alternatyw dla składników
-- `POST /api/ai/alternatives` - Sugestie alternatyw dla wybranych składników 
+W trybie deweloperskim logi są również wyświetlane w konsoli.
+
+## Licencja
+
+ISC 

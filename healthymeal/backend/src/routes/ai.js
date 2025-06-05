@@ -1,25 +1,33 @@
-/**
- * Trasy API związane z funkcjami AI
- */
 const express = require('express');
-const { auth } = require('../middleware/auth');
-const aiController = require('../controllers/ai');
-
 const router = express.Router();
+const { authMiddleware, checkAILimit } = require('../middleware/auth');
 
-// Wszystkie trasy wymagają uwierzytelnienia
-router.use(auth);
+// Endpoint do modyfikacji przepisu przez AI
+router.post('/modify/:recipeId', [authMiddleware, checkAILimit], async (req, res) => {
+  try {
+    // TODO: Implementacja modyfikacji przepisu przez AI
+    res.status(501).json({ 
+      message: 'Funkcjonalność w trakcie implementacji',
+      recipeId: req.params.recipeId
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-// Pobieranie informacji o wykorzystaniu AI przez użytkownika
-router.get('/usage', aiController.getAIUsage);
-
-// Modyfikacja przepisu za pomocą AI
-router.post('/modify-recipe', aiController.modifyRecipeWithAI);
-
-// Generowanie alternatywnych składników
-router.post('/ingredient-alternatives', aiController.suggestIngredientAlternatives);
-
-// Sprawdzanie statusu API AI
-router.get('/status', aiController.checkAPIStatus);
+// Endpoint do sprawdzenia limitu użycia AI
+router.get('/usage', authMiddleware, async (req, res) => {
+  try {
+    const user = req.user;
+    res.json({
+      aiUsage: user.aiUsage,
+      hasRemainingModifications: user.hasRemainingAIModifications(),
+      dailyLimit: 5,
+      remainingModifications: 5 - (user.aiUsage?.count || 0)
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 module.exports = router; 

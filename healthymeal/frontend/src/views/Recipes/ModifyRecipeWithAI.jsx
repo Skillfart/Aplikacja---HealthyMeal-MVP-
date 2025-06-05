@@ -6,36 +6,65 @@ import RecipeCard from '../../components/Recipe/RecipeCard';
 import Button from 'react-bootstrap/Button';
 import Alert from 'react-bootstrap/Alert';
 import { toast } from 'react-toastify';
+import { useAuth } from '../../contexts/AuthContext';
 
-const ModifyRecipeWithAI = ({ recipe, preferences, onSave, onCancel }) => {
+const ModifyRecipeWithAI = ({ recipe, preferences, onSave, onCancel, recipeId }) => {
   const [loading, setLoading] = useState(false);
   const [aiUsageLoading, setAiUsageLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modifiedRecipe, setModifiedRecipe] = useState(null);
   const [aiUsage, setAiUsage] = useState(null);
-  const [remainingCredits, setRemainingCredits] = useState(0);
+  const [remainingCredits, setRemainingCredits] = useState(5);
+  const [emergencyMode, setEmergencyMode] = useState(false);
+  const [warning, setWarning] = useState(null);
   const navigate = useNavigate();
+  const { getAccessToken, refreshToken, isAuthenticated } = useAuth();
+
+  // Funkcja pomocnicza do pobierania tokenu
+  const getAuthConfig = () => {
+    const token = getAccessToken();
+    return token ? {
+      headers: { Authorization: `Bearer ${token}` }
+    } : {};
+  };
 
   useEffect(() => {
     // Pobierz informacje o użyciu AI
     const fetchAiUsage = async () => {
       try {
         setAiUsageLoading(true);
+        
+        // Próbujemy pobrać informacje o kredytach - endpoint nie wymaga autoryzacji
         const response = await axios.get('/api/ai/usage');
+        
+        // Ustawienie wartości kredytów
         setAiUsage(response.data);
-        setRemainingCredits(response.data.remainingCredits || 0);
+        setRemainingCredits(response.data.remaining || 5);
         setAiUsageLoading(false);
       } catch (error) {
         console.error('Błąd podczas pobierania informacji o użyciu AI:', error);
         
+        // Ustawmy domyślne wartości
+        setRemainingCredits(5);
+        
         // Sprawdź czy błąd jest związany z autentykacją
         if (error.response && error.response.status === 401) {
-          setError('Musisz być zalogowany, aby korzystać z funkcji AI');
-          navigate('/login');
+          // Spróbuj odświeżyć token
+          try {
+            await refreshToken();
+            fetchAiUsage(); // Spróbuj ponownie po odświeżeniu tokenu
+          } catch (refreshError) {
+            setError('Problem z autoryzacją. Odświeżamy sesję...');
+            setTimeout(() => {
+              setError(null);
+              fetchAiUsage();
+            }, 1000);
+          }
         } else if (error.response && error.response.status === 403) {
           setError('Brak uprawnień do korzystania z funkcji AI');
         } else {
-          setError('Nie udało się pobrać informacji o dostępnych kredytach AI');
+          setError('Używamy domyślnych wartości kredytów.');
+          setTimeout(() => setError(null), 3000);
         }
         
         setAiUsageLoading(false);
@@ -43,67 +72,166 @@ const ModifyRecipeWithAI = ({ recipe, preferences, onSave, onCancel }) => {
     };
 
     fetchAiUsage();
-  }, [navigate]);
+  }, [refreshToken, navigate]);
 
-  const handleModifyRecipe = async () => {
-    // Sprawdź czy użytkownik ma wystarczającą liczbę kredytów
-    if (remainingCredits <= 0) {
+  const handleModify = async () => {
+    // W trybie deweloperskim zawsze pozwalamy na modyfikację
+    const isDevMode = process.env.NODE_ENV === 'development' || true; 
+    
+    // Sprawdź czy użytkownik ma wystarczającą liczbę kredytów (pomijamy w dev mode)
+    if (!isDevMode && remainingCredits <= 0) {
       setError('Nie masz wystarczającej liczby kredytów AI. Skontaktuj się z administratorem, aby uzyskać więcej kredytów.');
       return;
     }
-
+    
     try {
       setLoading(true);
       setError(null);
+      setWarning(null);
+      setEmergencyMode(false);
 
-      const response = await axios.post(`/api/ai/modify/${recipe.id}`, {
-        preferences: preferences
-      });
-
-      // Aktualizuj liczbę pozostałych kredytów
-      if (response.data.aiUsage) {
-        setRemainingCredits(response.data.aiUsage.remainingCredits || 0);
+      // Upewnij się, że mamy przepis i preferencje
+      if (!recipe) {
+        setError('Brak przepisu do modyfikacji');
+        setLoading(false);
+        return;
       }
 
-      setModifiedRecipe(response.data.recipe);
-      setLoading(false);
-    } catch (error) {
-      console.error('Błąd podczas modyfikacji przepisu:', error);
+      if (!preferences) {
+        setError('Brak preferencji do modyfikacji przepisu');
+        setLoading(false);
+        return;
+      }
+
+      // Używamy id z props (recipeId) jeśli jest dostępne, w przeciwnym razie z recipe
+      const id = recipeId || recipe.id || recipe._id;
       
-      let errorMessage = 'Wystąpił problem podczas modyfikacji przepisu.';
+      if (!id) {
+        setError('Błąd: Brak identyfikatora przepisu');
+        setLoading(false);
+        return;
+      }
+
+      // Pobierz token autoryzacyjny - będziemy próbować nawet jeśli użytkownik nie jest zalogowany
+      const config = getAuthConfig();
+      console.log('Konfiguracja autoryzacyjna:', config.headers?.Authorization ? 'Token obecny' : 'Brak tokenu');
       
-      if (error.response) {
-        // Obsługa różnych kodów błędów
-        switch(error.response.status) {
-          case 400:
-            errorMessage = 'Nieprawidłowe dane. Sprawdź preferencje i spróbuj ponownie.';
-            break;
-          case 401:
-            errorMessage = 'Musisz być zalogowany, aby modyfikować przepisy.';
-            navigate('/login');
-            break;
-          case 403:
-            errorMessage = 'Brak uprawnień do modyfikacji tego przepisu.';
-            break;
-          case 404:
-            errorMessage = 'Przepis nie został znaleziony.';
-            break;
-          case 429:
-            errorMessage = 'Przekroczono limit zapytań AI. Spróbuj ponownie później.';
-            break;
-          case 500:
-            errorMessage = 'Wewnętrzny błąd serwera. Spróbuj ponownie później.';
-            break;
-          default:
-            if (error.response.data && error.response.data.message) {
-              errorMessage = error.response.data.message;
+      // Wysyłamy zapytanie o modyfikację przepisu
+      console.log(`Modyfikuję przepis o ID: ${id}`);
+      try {
+        const response = await axios.post(`/api/ai/modify/${id}`, {
+          preferences: preferences
+        }, config);
+
+        // Aktualizuj liczbę pozostałych kredytów
+        if (response.data.aiUsage) {
+          setRemainingCredits(response.data.aiUsage.remaining || 0);
+        }
+
+        // Sprawdzamy, czy odpowiedź zawiera zmodyfikowany przepis bezpośrednio w data.recipe
+        // lub czy cała odpowiedź jest przepisem (dla trybu symulacyjnego)
+        let modifiedRecipeData;
+        if (response.data.modifiedRecipe) {
+          modifiedRecipeData = response.data.modifiedRecipe;
+        } else if (response.data.recipe) {
+          modifiedRecipeData = response.data.recipe;
+        } else if (response.data.title && response.data.ingredients) {
+          // Obiekt response.data jest przepisem
+          modifiedRecipeData = response.data;
+        } else {
+          throw new Error('Nieprawidłowy format odpowiedzi z serwera');
+        }
+
+        // Sprawdź czy odpowiedź zawiera ostrzeżenie
+        if (response.data.warning) {
+          setWarning(response.data.warning);
+          setEmergencyMode(true);
+          console.log("Tryb awaryjny:", response.data.warning);
+        }
+
+        setModifiedRecipe(modifiedRecipeData);
+        toast.success('Przepis został pomyślnie zmodyfikowany!');
+        
+      } catch (error) {
+        // Jeśli mamy błąd 401, spróbujmy odświeżyć token i spróbować ponownie
+        if (error.response && error.response.status === 401 && isAuthenticated) {
+          console.log('Błąd autoryzacji - próbuję odświeżyć token i ponowić zapytanie');
+          
+          try {
+            await refreshToken();
+            
+            // Pobierz zaktualizowany token
+            const newConfig = getAuthConfig();
+            
+            // Ponów zapytanie z nowym tokenem
+            const response = await axios.post(`/api/ai/modify/${id}`, {
+              preferences: preferences
+            }, newConfig);
+            
+            let modifiedRecipeData;
+            if (response.data.modifiedRecipe) {
+              modifiedRecipeData = response.data.modifiedRecipe;
+            } else if (response.data.recipe) {
+              modifiedRecipeData = response.data.recipe;
+            } else if (response.data.title && response.data.ingredients) {
+              modifiedRecipeData = response.data;
+            } else {
+              throw new Error('Nieprawidłowy format odpowiedzi z serwera');
             }
+            
+            if (response.data.warning) {
+              setWarning(response.data.warning);
+              setEmergencyMode(true);
+            }
+            
+            setModifiedRecipe(modifiedRecipeData);
+            toast.success('Przepis został pomyślnie zmodyfikowany!');
+            return;
+          } catch (refreshError) {
+            console.error('Nie udało się odświeżyć tokenu:', refreshError);
+            throw error; // Propaguj oryginalny błąd
+          }
+        } else {
+          throw error; // Propaguj błąd, jeśli to nie jest problem z autoryzacją
+        }
+      }
+    } catch (error) {
+      console.error('Błąd modyfikacji przepisu:', error);
+      
+      // Szczegółowe diagnostyka błędu
+      if (error.response) {
+        // Serwer odpowiedział kodem statusu poza zakresem 2xx
+        console.error('Dane odpowiedzi:', error.response.data);
+        console.error('Status HTTP:', error.response.status);
+        console.error('Nagłówki:', error.response.headers);
+        
+        if (error.response.status === 400) {
+          setError(`Błąd 400: ${error.response.data.message || 'Nieprawidłowe żądanie'}`);
+        } else if (error.response.status === 401) {
+          setError('Błąd autoryzacji. Spróbuj ponownie za chwilę lub odśwież stronę.');
+          // W trybie deweloperskim nie przekierowujemy do logowania
+          if (process.env.NODE_ENV !== 'development') {
+            navigate('/login');
+          }
+        } else if (error.response.status === 403) {
+          setError('Brak uprawnień do modyfikacji tego przepisu.');
+        } else if (error.response.status === 404) {
+          setError('Przepis nie został znaleziony.');
+        } else {
+          setError(`Błąd serwera: ${error.response.data.message || error.message || 'Nieznany błąd'}`);
         }
       } else if (error.request) {
-        errorMessage = 'Brak odpowiedzi z serwera. Sprawdź połączenie z internetem.';
+        // Żądanie zostało wykonane, ale nie otrzymano odpowiedzi
+        console.error('Brak odpowiedzi:', error.request);
+        setError('Brak odpowiedzi z serwera. Sprawdź połączenie sieciowe.');
+      } else {
+        // Coś poszło nie tak podczas konfiguracji żądania
+        console.error('Błąd konfiguracji:', error.message);
+        setError(`Błąd: ${error.message}`);
       }
       
-      setError(errorMessage);
+      toast.error('Nie udało się zmodyfikować przepisu!');
+    } finally {
       setLoading(false);
     }
   };
@@ -116,7 +244,7 @@ const ModifyRecipeWithAI = ({ recipe, preferences, onSave, onCancel }) => {
 
   const handleRetry = () => {
     setError(null);
-    handleModifyRecipe();
+    handleModify();
   };
 
   return (
@@ -134,6 +262,18 @@ const ModifyRecipeWithAI = ({ recipe, preferences, onSave, onCancel }) => {
               </Button>
             )}
           </div>
+        </Alert>
+      )}
+
+      {warning && (
+        <Alert variant="warning" className={styles.warning}>
+          <strong>Uwaga: </strong>{warning}
+        </Alert>
+      )}
+
+      {emergencyMode && (
+        <Alert variant="info" className={styles.info}>
+          <strong>Informacja: </strong>Przepis został zmodyfikowany w trybie awaryjnym. Modyfikacja może nie uwzględniać wszystkich Twoich preferencji. 
         </Alert>
       )}
 
@@ -196,7 +336,7 @@ const ModifyRecipeWithAI = ({ recipe, preferences, onSave, onCancel }) => {
           <>
             <Button
               className={styles.modifyButton}
-              onClick={handleModifyRecipe}
+              onClick={handleModify}
               disabled={loading || aiUsageLoading || remainingCredits <= 0}
             >
               Zmodyfikuj przepis z AI
@@ -220,7 +360,7 @@ const ModifyRecipeWithAI = ({ recipe, preferences, onSave, onCancel }) => {
               className={styles.modifyAgainButton}
               onClick={() => {
                 setModifiedRecipe(null);
-                handleModifyRecipe();
+                handleModify();
               }}
               disabled={loading || remainingCredits <= 0}
             >

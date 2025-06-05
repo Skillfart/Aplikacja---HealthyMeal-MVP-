@@ -1,113 +1,109 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import PasswordResetForm from './PasswordResetForm';
-import { getAuthStatus } from '../../lib/supabase';
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { toast } from 'react-toastify';
 
-// Style dla komponentu
-const styles = {
-  container: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '20px',
-    backgroundColor: '#f5f5f5',
-  },
-  logoContainer: {
-    marginBottom: '30px',
-    textAlign: 'center',
-  },
-  logo: {
-    height: '60px',
-  },
-  formContainer: {
-    width: '100%',
-    maxWidth: '450px',
-  },
-  bottomLinks: {
-    marginTop: '20px',
-    textAlign: 'center',
-    color: '#666',
-  },
-  link: {
-    color: '#4CAF50',
-    textDecoration: 'none',
-    marginLeft: '5px',
-  },
-  successMessage: {
-    backgroundColor: '#e8f5e9',
-    color: '#2e7d32',
-    padding: '15px',
-    borderRadius: '4px',
-    textAlign: 'center',
-    marginBottom: '20px',
-  },
-};
-
+/**
+ * Komponent strony resetowania hasła
+ * Umożliwia użytkownikowi zresetowanie hasła poprzez podanie adresu email
+ * 
+ * @returns {React.ReactElement} Formularz resetowania hasła
+ */
 const PasswordResetPage = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const { resetPassword } = useAuth();
 
-  // Sprawdzenie stanu autentykacji przy ładowaniu komponentu
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { isAuthenticated } = await getAuthStatus();
-      
-      if (isAuthenticated) {
-        // Jeśli użytkownik jest już zalogowany, przekieruj do dashboardu
-        navigate('/dashboard');
-      }
-      
-      setIsAuthenticated(isAuthenticated);
-    };
+  /**
+   * Obsługa resetowania hasła
+   * @param {React.FormEvent} e - Wydarzenie submit formularza
+   */
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
     
-    checkAuth();
-  }, [navigate]);
-
-  // Jeśli użytkownik jest już zalogowany, nie pokazuj strony resetowania hasła
-  if (isAuthenticated) {
-    return null; // lub możesz pokazać komunikat o przekierowaniu
-  }
-
-  const handleResetSuccess = () => {
-    // Pokaż wiadomość o sukcesie
-    setShowSuccess(true);
+    // Podstawowa walidacja
+    if (!email) {
+      toast.error('Proszę podać adres email');
+      return;
+    }
     
-    // Przekieruj do strony logowania po krótkim opóźnieniu
-    setTimeout(() => {
-      navigate('/login');
-    }, 5000);
+    try {
+      setIsSubmitting(true);
+      const { error } = await resetPassword(email);
+      
+      if (error) throw error;
+      
+      // Pokazanie komunikatu o sukcesie
+      setIsSubmitted(true);
+    } catch (error) {
+      console.error('Błąd resetowania hasła:', error);
+      // Toast pokazywany jest już w funkcji resetPassword w AuthContext
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.logoContainer}>
-        <img 
-          src="/logo.svg" 
-          alt="HealthyMeal Logo" 
-          style={styles.logo} 
-          onError={(e) => {
-            // Fallback jeśli logo nie istnieje
-            e.target.src = 'https://via.placeholder.com/150x60?text=HealthyMeal';
-          }}
-        />
-      </div>
-      
-      <div style={styles.formContainer}>
-        {showSuccess && (
-          <div style={styles.successMessage}>
-            Link do resetowania hasła został wysłany! Sprawdź swoją skrzynkę email.
+    <div className="container mt-5" data-testid="password-reset-page">
+      <div className="row justify-content-center">
+        <div className="col-md-6 col-lg-4">
+          <div className="card shadow">
+            <div className="card-body">
+              <h2 className="card-title text-center mb-4">Resetowanie hasła</h2>
+              
+              {isSubmitted ? (
+                <div className="alert alert-success" data-testid="success-message">
+                  <p className="mb-0">Na podany adres email wysłaliśmy link do resetowania hasła.</p>
+                  <p className="mt-2 mb-0">Sprawdź swoją skrzynkę odbiorczą i kliknij w link, aby kontynuować.</p>
+                </div>
+              ) : (
+                <form onSubmit={handleResetPassword}>
+                  <div className="mb-3">
+                    <label htmlFor="email" className="form-label">Email</label>
+                    <input
+                      id="email"
+                      type="email"
+                      className="form-control"
+                      placeholder="Twój adres email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      disabled={isSubmitting}
+                    />
+                    <div className="form-text">
+                      Podaj adres email przypisany do Twojego konta, a my wyślemy Ci link do zresetowania hasła.
+                    </div>
+                  </div>
+                  
+                  <div className="d-grid gap-2 mb-3">
+                    <button 
+                      type="submit" 
+                      className="btn btn-primary"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                          Wysyłanie...
+                        </>
+                      ) : 'Zresetuj hasło'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+            
+            <div className="card-footer text-center">
+              <p className="mb-0">
+                <Link to="/login" className="text-decoration-none">Powrót do logowania</Link>
+              </p>
+            </div>
           </div>
-        )}
-        
-        <PasswordResetForm onSuccess={handleResetSuccess} />
-        
-        <div style={styles.bottomLinks}>
-          <Link to="/login" style={styles.link}>
-            Powrót do logowania
-          </Link>
+          
+          <div className="text-center mt-3">
+            <Link to="/" className="text-decoration-none">Powrót do strony głównej</Link>
+          </div>
         </div>
       </div>
     </div>

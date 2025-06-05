@@ -1,540 +1,320 @@
-const User = require('../models/User');
 const Recipe = require('../models/Recipe');
+const ModifiedRecipe = require('../models/ModifiedRecipe');
 const Ingredient = require('../models/Ingredient');
-const mongoose = require('mongoose');
-const { ObjectId } = mongoose.Types;
+const logger = require('../utils/logger');
+const { validateRecipe } = require('../validators/recipeValidator');
+const { generateRecipeModification } = require('../services/aiService');
+const cache = require('../utils/cache');
 
-// Pobierz wszystkie przepisy użytkownika
-exports.getUserRecipes = async (req, res) => {
-  try {
-    const { search, tags, difficulty, maxPreparationTime, page = 1, limit = 10 } = req.query;
-    const userId = req.user._id;
-    const skip = (page - 1) * limit;
-    
-    // Podstawowy filtr: przepisy należące do użytkownika i nieusunięte
-    let query = {
-      'user._id': userId,
-      isDeleted: false
-    };
-    
-    // Dodaj filtr wyszukiwania, jeśli podano
-    if (search) {
-      query.$text = { $search: search };
-    }
-    
-    // Dodaj filtr tagów, jeśli podano
-    if (tags) {
-      const tagArray = tags.split(',');
-      query.tags = { $in: tagArray };
-    }
-    
-    // Dodaj filtr trudności, jeśli podano
-    if (difficulty) {
-      query.difficulty = difficulty;
-    }
-    
-    // Dodaj filtr czasu przygotowania, jeśli podano
-    if (maxPreparationTime) {
-      query.preparationTime = { $lte: parseInt(maxPreparationTime) };
-    }
-    
-    console.log("Zapytanie o przepisy:", JSON.stringify(query));
-    
-    // Pobierz przepisy z paginacją
-    const recipes = await Recipe.find(query)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .select('title ingredients.ingredient.name preparationTime difficulty servings tags nutritionalValues createdAt');
-    
-    console.log(`Znaleziono ${recipes.length} przepisów`);
-    
-    // Pobierz całkowitą liczbę przepisów spełniających kryteria
-    const total = await Recipe.countDocuments(query);
-    
-    res.status(200).json({
-      total,
-      page: parseInt(page),
-      limit: parseInt(limit),
-      recipes
-    });
-  } catch (error) {
-    console.error('Błąd pobierania przepisów:', error);
-    res.status(500).json({ message: 'Błąd serwera', error: error.message });
-  }
-};
+class RecipeController {
+  /**
+   * Pobierz listę przepisów z filtrowaniem
+   */
+  async getRecipes(req, res) {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        sort = '-createdAt',
+        difficulty,
+        maxCarbs,
+        tags,
+        search
+      } = req.query;
 
-// Pobierz jeden przepis
-exports.getRecipeById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user._id;
-    
-    console.log(`Pobieranie przepisu o ID: ${id} dla użytkownika: ${userId}`);
-    
-    // Sprawdzanie czy id jest zdefiniowane i poprawne
-    if (!id || id === 'undefined') {
-      return res.status(400).json({ message: 'Nieprawidłowy identyfikator przepisu' });
-    }
-    
-    // Sprawdzenie czy id jest poprawnym ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'Nieprawidłowy format identyfikatora przepisu' });
-    }
-    
-    const recipe = await Recipe.findOne({
-      _id: id,
-      'user._id': userId,
-      isDeleted: false
-    });
-    
-    if (!recipe) {
-      console.log(`Przepis o ID: ${id} nie znaleziony`);
-      return res.status(404).json({ message: 'Przepis nie znaleziony' });
-    }
-    
-    console.log(`Przepis ${recipe.title} znaleziony`);
-    res.status(200).json(recipe);
-  } catch (error) {
-    console.error('Błąd pobierania przepisu:', error);
-    res.status(500).json({ message: 'Błąd serwera', error: error.message });
-  }
-};
+      const query = { isDeleted: false };
 
-// Utwórz nowy przepis
-exports.createRecipe = async (req, res) => {
-  try {
-    // Sprawdź, czy mamy dane użytkownika
-    if (!req.user || !req.user._id) {
-      console.error('Brak danych użytkownika w żądaniu', req.user);
-      return res.status(401).json({ message: 'Brak autoryzacji - brakujące dane użytkownika' });
-    }
-    
-    const { 
-      title, 
-      ingredients, 
-      steps, 
-      preparationTime, 
-      difficulty, 
-      servings, 
-      tags, 
-      nutritionalValues 
-    } = req.body;
-    
-    // Walidacja wymaganych pól
-    if (!title) {
-      return res.status(400).json({ message: 'Tytuł przepisu jest wymagany' });
-    }
-    
-    if (!ingredients || !Array.isArray(ingredients) || ingredients.length === 0) {
-      return res.status(400).json({ message: 'Wymagany jest co najmniej jeden składnik' });
-    }
-    
-    if (!steps || !Array.isArray(steps) || steps.length === 0) {
-      return res.status(400).json({ message: 'Wymagany jest co najmniej jeden krok' });
-    }
-    
-    const userId = req.user._id;
-    const userEmail = req.user.email;
-    
-    console.log(`Tworzenie przepisu dla użytkownika: ${userId} (${userEmail})`);
-    
-    // Przetwarzanie składników
-    const processedIngredients = [];
-    
-    for (let i = 0; i < ingredients.length; i++) {
-      try {
-        const item = ingredients[i];
-        
-        // Upewnij się, że item ma właściwą strukturę
-        if (!item) {
-          return res.status(400).json({ 
-            message: `Nieprawidłowy format składnika na pozycji ${i+1}` 
-          });
-        }
-        
-        let ingredientId;
-        let ingredientName;
-        
-        // Obsługa różnych formatów danych
-        if (item.name && typeof item.name === 'string') {
-          // Formatowanie nazwy składnika
-          const formattedName = item.name.trim().toLowerCase();
-          
-          // Szukanie istniejącego składnika po nazwie
-          const existingIngredient = await Ingredient.findOne({ 
-            name: formattedName 
-          });
-          
-          if (existingIngredient) {
-            ingredientId = existingIngredient._id;
-            ingredientName = existingIngredient.name;
-          } else {
-            // Tworzenie nowego składnika z domyślnymi wartościami
-            const newIngredient = new Ingredient({
-              name: formattedName,
-              category: 'other',
-              nutritionalValues: {
-                calories: 0,
-                carbs: 0,
-                protein: 0,
-                fat: 0,
-                fiber: 0,
-                sugar: 0
-              }
-            });
-            
-            await newIngredient.save();
-            ingredientId = newIngredient._id;
-            ingredientName = formattedName;
-          }
-        } else if (item.ingredient && item.ingredient.name && typeof item.ingredient.name === 'string') {
-          // Obsługa formatu {ingredient: {name: "nazwa"}}
-          const formattedName = item.ingredient.name.trim().toLowerCase();
-          
-          // Szukanie istniejącego składnika po nazwie
-          const existingIngredient = await Ingredient.findOne({ 
-            name: formattedName 
-          });
-          
-          if (existingIngredient) {
-            ingredientId = existingIngredient._id;
-            ingredientName = existingIngredient.name;
-          } else {
-            // Tworzenie nowego składnika z domyślnymi wartościami
-            const newIngredient = new Ingredient({
-              name: formattedName,
-              category: 'other',
-              nutritionalValues: {
-                calories: 0,
-                carbs: 0,
-                protein: 0,
-                fat: 0,
-                fiber: 0,
-                sugar: 0
-              }
-            });
-            
-            await newIngredient.save();
-            ingredientId = newIngredient._id;
-            ingredientName = formattedName;
-          }
-        } else if (item.ingredient && item.ingredient._id) {
-          // Sprawdzenie czy składnik z podanym ID istnieje
-          const ingredientExists = await Ingredient.findById(item.ingredient._id);
-          if (!ingredientExists) {
-            return res.status(400).json({ 
-              message: `Nie znaleziono składnika o ID ${item.ingredient._id}` 
-            });
-          }
-          ingredientId = item.ingredient._id;
-          ingredientName = item.ingredient.name || ingredientExists.name;
-        } else {
-          return res.status(400).json({ 
-            message: `Nieprawidłowy format składnika na pozycji ${i+1}. Podaj nazwę lub ID składnika.` 
-          });
-        }
-        
-        // Dodanie przetworzonego składnika
-        processedIngredients.push({
-          ingredient: {
-            _id: ingredientId,
-            name: ingredientName
-          },
-          quantity: parseFloat(item.quantity) || 0,
-          unit: item.unit || 'g',
-          isOptional: Boolean(item.isOptional)
-        });
-        
-      } catch (err) {
-        console.error(`Błąd przetwarzania składnika ${i+1}:`, err);
-        return res.status(400).json({ 
-          message: `Błąd przetwarzania składnika na pozycji ${i+1}: ${err.message}`
-        });
+      // Filtrowanie po trudności
+      if (difficulty) {
+        query.difficulty = difficulty;
       }
-    }
-    
-    // Przetwarzanie kroków
-    const processedSteps = steps.map((step, index) => {
-      if (typeof step === 'string') {
-        return {
-          number: index + 1,
-          description: step
-        };
-      } else if (typeof step === 'object') {
-        return {
-          number: step.number || index + 1,
-          description: step.description || '',
-          estimatedTime: step.estimatedTime || 0
-        };
-      }
-      return null;
-    }).filter(step => step !== null);
-    
-    // Tworzenie nowego przepisu
-    const recipe = new Recipe({
-      title,
-      user: {
-        _id: userId,
-        email: userEmail
-      },
-      ingredients: processedIngredients,
-      steps: processedSteps,
-      preparationTime: preparationTime || 0,
-      difficulty: difficulty || 'medium',
-      servings: servings || 1,
-      tags: Array.isArray(tags) ? tags : [],
-      nutritionalValues: nutritionalValues || {
-        totalCalories: 0,
-        totalCarbs: 0,
-        totalProtein: 0,
-        totalFat: 0
-      },
-      isDeleted: false
-    });
-    
-    await recipe.save();
-    console.log(`Utworzono nowy przepis: ${recipe.title} (${recipe._id})`);
-    
-    res.status(201).json({ 
-      message: 'Przepis dodany pomyślnie',
-      recipeId: recipe._id
-    });
-  } catch (error) {
-    console.error('Błąd tworzenia przepisu:', error);
-    res.status(500).json({ 
-      message: 'Błąd serwera podczas tworzenia przepisu', 
-      error: error.message 
-    });
-  }
-};
 
-// Aktualizuj przepis
-exports.updateRecipe = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user._id;
-    
-    // Pobranie aktualizowanych pól
-    const {
-      title,
-      ingredients,
-      steps,
-      preparationTime,
-      difficulty,
-      servings,
-      tags,
-      nutritionalValues
-    } = req.body;
-    
-    // Szukanie przepisu
-    const recipe = await Recipe.findOne({
-      _id: id,
-      "user._id": userId,
-      isDeleted: false
-    });
-    
-    if (!recipe) {
-      return res.status(404).json({ message: 'Przepis nie znaleziony' });
-    }
-    
-    console.log(`Aktualizacja przepisu: ${recipe.title} (${recipe._id})`);
-    
-    // Aktualizacja podstawowych pól
-    if (title) recipe.title = title;
-    if (preparationTime !== undefined) recipe.preparationTime = preparationTime;
-    if (difficulty) recipe.difficulty = difficulty;
-    if (servings) recipe.servings = servings;
-    if (tags) recipe.tags = tags;
-    if (nutritionalValues) recipe.nutritionalValues = {
-      ...recipe.nutritionalValues,
-      ...nutritionalValues
-    };
-    
-    // Aktualizacja kroków
-    if (steps && Array.isArray(steps)) {
-      const processedSteps = steps.map((step, index) => {
-        if (typeof step === 'string') {
-          return {
-            number: index + 1,
-            description: step
-          };
-        } else if (typeof step === 'object') {
-          return {
-            number: step.number || index + 1,
-            description: step.description || '',
-            estimatedTime: step.estimatedTime || 0
-          };
-        }
-        return null;
-      }).filter(step => step !== null);
-      
-      recipe.steps = processedSteps;
-    }
-    
-    // Aktualizacja składników
-    if (ingredients && Array.isArray(ingredients)) {
-      const processedIngredients = [];
-      
-      for (let i = 0; i < ingredients.length; i++) {
-        try {
-          const item = ingredients[i];
-          
-          // Upewnij się, że item ma właściwą strukturę
-          if (!item) {
-            return res.status(400).json({ 
-              message: `Nieprawidłowy format składnika na pozycji ${i+1}` 
-            });
-          }
-          
-          let ingredientId;
-          let ingredientName;
-          
-          // Obsługa różnych formatów danych
-          if (item.name && typeof item.name === 'string') {
-            // Formatowanie nazwy składnika
-            const formattedName = item.name.trim().toLowerCase();
-            
-            // Szukanie istniejącego składnika po nazwie
-            const existingIngredient = await Ingredient.findOne({ 
-              name: formattedName 
-            });
-            
-            if (existingIngredient) {
-              ingredientId = existingIngredient._id;
-              ingredientName = existingIngredient.name;
-            } else {
-              // Tworzenie nowego składnika z domyślnymi wartościami
-              const newIngredient = new Ingredient({
-                name: formattedName,
-                category: 'other',
-                nutritionalValues: {
-                  calories: 0,
-                  carbs: 0,
-                  protein: 0,
-                  fat: 0,
-                  fiber: 0,
-                  sugar: 0
-                }
-              });
-              
-              await newIngredient.save();
-              ingredientId = newIngredient._id;
-              ingredientName = formattedName;
-            }
-          } else if (item.ingredient && item.ingredient.name && typeof item.ingredient.name === 'string') {
-            // Obsługa formatu {ingredient: {name: "nazwa"}}
-            const formattedName = item.ingredient.name.trim().toLowerCase();
-            
-            // Szukanie istniejącego składnika po nazwie
-            const existingIngredient = await Ingredient.findOne({ 
-              name: formattedName 
-            });
-            
-            if (existingIngredient) {
-              ingredientId = existingIngredient._id;
-              ingredientName = existingIngredient.name;
-            } else {
-              // Tworzenie nowego składnika z domyślnymi wartościami
-              const newIngredient = new Ingredient({
-                name: formattedName,
-                category: 'other',
-                nutritionalValues: {
-                  calories: 0,
-                  carbs: 0,
-                  protein: 0,
-                  fat: 0,
-                  fiber: 0,
-                  sugar: 0
-                }
-              });
-              
-              await newIngredient.save();
-              ingredientId = newIngredient._id;
-              ingredientName = formattedName;
-            }
-          } else if (item.ingredient && item.ingredient._id) {
-            // Sprawdzenie czy składnik z podanym ID istnieje
-            const ingredientExists = await Ingredient.findById(item.ingredient._id);
-            if (!ingredientExists) {
-              return res.status(400).json({ 
-                message: `Nie znaleziono składnika o ID ${item.ingredient._id}` 
-              });
-            }
-            ingredientId = item.ingredient._id;
-            ingredientName = item.ingredient.name || ingredientExists.name;
-          } else {
-            return res.status(400).json({ 
-              message: `Nieprawidłowy format składnika na pozycji ${i+1}. Podaj nazwę lub ID składnika.` 
-            });
-          }
-          
-          // Dodanie przetworzonego składnika
-          processedIngredients.push({
-            ingredient: {
-              _id: ingredientId,
-              name: ingredientName
-            },
-            quantity: parseFloat(item.quantity) || 0,
-            unit: item.unit || 'g',
-            isOptional: Boolean(item.isOptional)
-          });
-          
-        } catch (err) {
-          console.error(`Błąd przetwarzania składnika ${i+1}:`, err);
-          return res.status(400).json({ 
-            message: `Błąd przetwarzania składnika na pozycji ${i+1}: ${err.message}`
-          });
-        }
+      // Filtrowanie po maksymalnej ilości węglowodanów
+      if (maxCarbs) {
+        query['nutritionalValues.carbsPerServing'] = { $lte: parseFloat(maxCarbs) };
       }
-      
-      recipe.ingredients = processedIngredients;
-    }
-    
-    await recipe.save();
-    console.log(`Przepis zaktualizowany: ${recipe.title} (${recipe._id})`);
-    
-    res.status(200).json({
-      message: 'Przepis zaktualizowany pomyślnie',
-      recipeId: recipe._id
-    });
-    
-  } catch (error) {
-    console.error('Błąd aktualizacji przepisu:', error);
-    res.status(500).json({ 
-      message: 'Błąd serwera podczas aktualizacji przepisu', 
-      error: error.message 
-    });
-  }
-};
 
-// Usuń przepis (soft delete)
-exports.deleteRecipe = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user._id;
-    
-    console.log(`Usuwanie przepisu o ID: ${id} dla użytkownika: ${userId}`);
-    
-    // Znajdź przepis
-    const recipe = await Recipe.findOne({
-      _id: id,
-      'user._id': userId,
-      isDeleted: false
-    });
-    
-    if (!recipe) {
-      console.log(`Przepis o ID: ${id} nie znaleziony`);
-      return res.status(404).json({ message: 'Przepis nie znaleziony' });
+      // Filtrowanie po tagach
+      if (tags) {
+        const tagArray = tags.split(',').map(tag => tag.trim());
+        query.tags = { $all: tagArray };
+      }
+
+      // Wyszukiwanie po tekście
+      if (search) {
+        query.$text = { $search: search };
+      }
+
+      const options = {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        sort,
+        populate: {
+          path: 'ingredients.ingredient',
+          select: 'name nutritionalValues'
+        }
+      };
+
+      const recipes = await Recipe.paginate(query, options);
+
+      res.json({
+        recipes: recipes.docs,
+        totalPages: recipes.totalPages,
+        currentPage: recipes.page,
+        totalRecipes: recipes.totalDocs
+      });
+    } catch (error) {
+      logger.error('Error fetching recipes:', error);
+      res.status(500).json({ error: 'Internal server error' });
     }
-    
-    // Wykonaj soft delete
-    recipe.isDeleted = true;
-    await recipe.save();
-    console.log(`Przepis oznaczony jako usunięty: ${recipe.title} (${recipe._id})`);
-    
-    res.status(200).json({ message: 'Przepis usunięty pomyślnie' });
-  } catch (error) {
-    console.error('Błąd usuwania przepisu:', error);
-    res.status(500).json({ message: 'Błąd serwera', error: error.message });
   }
-}; 
+
+  /**
+   * Pobierz szczegóły przepisu
+   */
+  async getRecipe(req, res) {
+    try {
+      const recipe = await Recipe.findOne({
+        _id: req.params.id,
+        isDeleted: false
+      }).populate('ingredients.ingredient', 'name nutritionalValues');
+
+      if (!recipe) {
+        return res.status(404).json({ error: 'Recipe not found' });
+      }
+
+      res.json(recipe);
+    } catch (error) {
+      logger.error('Error fetching recipe:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Utwórz nowy przepis
+   */
+  async createRecipe(req, res) {
+    try {
+      const { error } = validateRecipe(req.body);
+      if (error) {
+        return res.status(400).json({ error: error.details[0].message });
+      }
+
+      const recipe = new Recipe({
+        ...req.body,
+        user: {
+          _id: req.user._id,
+          email: req.user.email
+        }
+      });
+
+      await recipe.calculateNutritionalValues();
+      await recipe.save();
+
+      res.status(201).json(recipe);
+    } catch (error) {
+      logger.error('Error creating recipe:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Zaktualizuj przepis
+   */
+  async updateRecipe(req, res) {
+    try {
+      const { error } = validateRecipe(req.body);
+      if (error) {
+        return res.status(400).json({ error: error.details[0].message });
+      }
+
+      const recipe = await Recipe.findOne({
+        _id: req.params.id,
+        'user._id': req.user._id,
+        isDeleted: false
+      });
+
+      if (!recipe) {
+        return res.status(404).json({ error: 'Recipe not found' });
+      }
+
+      Object.assign(recipe, req.body);
+      await recipe.calculateNutritionalValues();
+      await recipe.save();
+
+      res.json(recipe);
+    } catch (error) {
+      logger.error('Error updating recipe:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Usuń przepis (soft delete)
+   */
+  async deleteRecipe(req, res) {
+    try {
+      const recipe = await Recipe.findOne({
+        _id: req.params.id,
+        'user._id': req.user._id,
+        isDeleted: false
+      });
+
+      if (!recipe) {
+        return res.status(404).json({ error: 'Recipe not found' });
+      }
+
+      await recipe.softDelete();
+      res.json({ message: 'Recipe deleted successfully' });
+    } catch (error) {
+      logger.error('Error deleting recipe:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Zmodyfikuj przepis za pomocą AI
+   */
+  async modifyRecipe(req, res) {
+    try {
+      const { dietType, maxCarbs } = req.body;
+
+      const recipe = await Recipe.findOne({
+        _id: req.params.id,
+        isDeleted: false
+      }).populate('ingredients.ingredient');
+
+      if (!recipe) {
+        return res.status(404).json({ error: 'Recipe not found' });
+      }
+
+      // Sprawdź limit użycia AI
+      if (req.user.aiUsage.count >= req.user.aiUsage.limit) {
+        return res.status(429).json({ error: 'AI usage limit exceeded' });
+      }
+
+      // Sprawdź cache
+      const cacheKey = `recipe:${recipe._id}:modification:${dietType}:${maxCarbs}`;
+      const cachedModification = await cache.get(cacheKey);
+
+      if (cachedModification) {
+        return res.json(JSON.parse(cachedModification));
+      }
+
+      // Generuj modyfikację przepisu
+      const modification = await generateRecipeModification(recipe, {
+        dietType,
+        maxCarbs,
+        userPreferences: req.user.preferences
+      });
+
+      // Zapisz zmodyfikowany przepis
+      const modifiedRecipe = new ModifiedRecipe({
+        originalRecipe: {
+          _id: recipe._id,
+          title: recipe.title
+        },
+        user: {
+          _id: req.user._id,
+          email: req.user.email
+        },
+        ...modification
+      });
+
+      await modifiedRecipe.calculateNutritionalValues(recipe);
+      await modifiedRecipe.save();
+
+      // Aktualizuj licznik użycia AI
+      req.user.aiUsage.count += 1;
+      await req.user.save();
+
+      // Zapisz w cache
+      await cache.set(cacheKey, JSON.stringify(modifiedRecipe), 86400); // 24h
+
+      res.json(modifiedRecipe);
+    } catch (error) {
+      logger.error('Error modifying recipe:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Pobierz listę zmodyfikowanych przepisów użytkownika
+   */
+  async getModifiedRecipes(req, res) {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        sort = '-createdAt'
+      } = req.query;
+
+      const query = {
+        'user._id': req.user._id,
+        isDeleted: false
+      };
+
+      const options = {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        sort,
+        populate: {
+          path: 'originalRecipe._id',
+          select: 'title nutritionalValues'
+        }
+      };
+
+      const recipes = await ModifiedRecipe.paginate(query, options);
+
+      res.json({
+        recipes: recipes.docs,
+        totalPages: recipes.totalPages,
+        currentPage: recipes.page,
+        totalRecipes: recipes.totalDocs
+      });
+    } catch (error) {
+      logger.error('Error fetching modified recipes:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Pobierz przepis dnia (najnowszy przepis)
+   */
+  async getRecipeOfDay(req, res) {
+    try {
+      const recipe = await Recipe.findOne({ isDeleted: false })
+        .sort({ createdAt: -1 })
+        .populate('ingredients.ingredient', 'name nutritionalValues');
+
+      if (!recipe) {
+        return res.status(404).json({ error: 'Nie znaleziono przepisu dnia' });
+      }
+
+      res.json(recipe);
+    } catch (error) {
+      logger.error('Error fetching recipe of day:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  /**
+   * Pobierz ostatnie przepisy
+   */
+  async getRecentRecipes(req, res) {
+    try {
+      const { limit = 5 } = req.query;
+      const recipes = await Recipe.find({ isDeleted: false })
+        .sort({ createdAt: -1 })
+        .limit(parseInt(limit))
+        .populate('ingredients.ingredient', 'name nutritionalValues');
+
+      res.json(recipes);
+    } catch (error) {
+      logger.error('Error fetching recent recipes:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+}
+
+module.exports = new RecipeController(); 

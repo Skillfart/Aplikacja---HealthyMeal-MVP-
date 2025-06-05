@@ -1,123 +1,197 @@
 /**
  * Serwis do zarządzania limitami API
- * Pozwala na monitorowanie i kontrolowanie użycia zewnętrznych API
+ * Śledzi wykorzystanie API przez użytkowników i zarządza resetem limitów
  */
-const User = require('../models/User');
-const config = require('../config/env');
+
+const logger = require('../utils/logger');
+const fs = require('fs').promises;
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 
 class ApiLimitManager {
   constructor() {
-    this.requestCounts = new Map(); // Mapa do śledzenia liczby zapytań
-    this.resetInterval = 24 * 60 * 60 * 1000; // 24 godziny w milisekundach
-    
-    // Resetuj liczniki co 24 godziny
-    setInterval(() => this._resetCounters(), this.resetInterval);
+    this.dataFile = path.join(__dirname, '../../data/api_limits.json');
+    this.limits = null;
+    this._ensureDataFile();
   }
-  
+
   /**
-   * Sprawdza czy użytkownik przekroczył dzienny limit zapytań AI
-   * @param {Object} user - Obiekt użytkownika
-   * @returns {Object} - Informacje o limitach i czy przekroczono limit
+   * Upewnia się, że plik z danymi istnieje
+   * @private
    */
-  async checkUserAILimit(user) {
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    
-    let usedCount = 0;
-    let remainingCount = config.AI_DAILY_LIMIT;
-    
-    if (user.aiUsage && user.aiUsage.date >= todayStart) {
-      usedCount = user.aiUsage.count;
-      remainingCount = Math.max(0, config.AI_DAILY_LIMIT - usedCount);
-    }
-    
-    const limitExceeded = usedCount >= config.AI_DAILY_LIMIT;
-    
-    return {
-      limitExceeded,
-      usedCount,
-      remainingCount,
-      dailyLimit: config.AI_DAILY_LIMIT,
-      resetAt: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
-    };
-  }
-  
-  /**
-   * Zwiększa licznik użycia AI dla użytkownika
-   * @param {Object} user - Obiekt użytkownika
-   * @returns {Promise<Object>} - Zaktualizowane informacje o limitach
-   */
-  async incrementUserAIUsage(user) {
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    
-    if (!user.aiUsage || user.aiUsage.date < todayStart) {
-      user.aiUsage = {
-        date: today,
-        count: 1
-      };
-    } else {
-      user.aiUsage.count += 1;
-    }
-    
-    await user.save();
-    
-    return {
-      usedCount: user.aiUsage.count,
-      remainingCount: Math.max(0, config.AI_DAILY_LIMIT - user.aiUsage.count),
-      dailyLimit: config.AI_DAILY_LIMIT
-    };
-  }
-  
-  /**
-   * Monitoruje użycie API przez określonego klienta (np. IP)
-   * @param {string} clientId - Identyfikator klienta (np. adres IP)
-   * @param {number} limitPerTimeFrame - Limit zapytań w danym oknie czasowym
-   * @param {string} apiName - Nazwa API do monitorowania
-   * @returns {boolean} - True jeśli nie przekroczono limitu, false w przeciwnym razie
-   */
-  checkRateLimit(clientId, limitPerTimeFrame, apiName = 'default') {
-    const key = `${clientId}:${apiName}`;
-    const currentCount = this.requestCounts.get(key) || 0;
-    
-    if (currentCount >= limitPerTimeFrame) {
-      return false; // Przekroczono limit
-    }
-    
-    this.requestCounts.set(key, currentCount + 1);
-    return true; // Nie przekroczono limitu
-  }
-  
-  /**
-   * Zwraca aktualne statystyki użycia API
-   * @returns {Object} - Statystyki użycia dla wszystkich klientów
-   */
-  getUsageStatistics() {
-    const stats = {};
-    
-    for (const [key, count] of this.requestCounts.entries()) {
-      const [clientId, apiName] = key.split(':');
+  async _ensureDataFile() {
+    try {
+      await fs.access(this.dataFile);
+    } catch (error) {
+      // Plik nie istnieje, utwórz katalog i pusty plik
+      const dir = path.dirname(this.dataFile);
       
-      if (!stats[apiName]) {
-        stats[apiName] = {};
+      try {
+        await fs.mkdir(dir, { recursive: true });
+      } catch (mkdirError) {
+        if (mkdirError.code !== 'EEXIST') {
+          logger.error(`Błąd podczas tworzenia katalogu dla limitów API: ${mkdirError.message}`);
+        }
       }
       
-      stats[apiName][clientId] = count;
+      await this._saveData({});
+      logger.info(`Utworzono nowy plik do śledzenia limitów API: ${this.dataFile}`);
+    }
+  }
+
+  /**
+   * Ładuje dane z pliku
+   * @private
+   * @returns {Promise<Object>} Dane limitów API
+   */
+  async _loadData() {
+    if (this.limits) {
+      return this.limits;
+    }
+    
+    try {
+      const data = await fs.readFile(this.dataFile, 'utf8');
+      this.limits = JSON.parse(data);
+      return this.limits;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // Plik nie istnieje, utwórz go
+        this.limits = {};
+        await this._saveData(this.limits);
+        return this.limits;
+      }
+      
+      logger.error(`Błąd podczas wczytywania limitów API: ${error.message}`);
+      return {};
+    }
+  }
+
+  /**
+   * Zapisuje dane do pliku
+   * @private
+   * @param {Object} data - Dane do zapisania
+   * @returns {Promise<void>}
+   */
+  async _saveData(data) {
+    try {
+      await fs.writeFile(this.dataFile, JSON.stringify(data, null, 2), 'utf8');
+      this.limits = data;
+    } catch (error) {
+      logger.error(`Błąd podczas zapisywania limitów API: ${error.message}`);
+    }
+  }
+
+  /**
+   * Pobiera limity użytkownika
+   * @param {string} userId - ID użytkownika
+   * @returns {Promise<Object>} Informacje o limitach
+   */
+  async getUserLimits(userId) {
+    const data = await this._loadData();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Jeśli nie ma rekordu dla tego użytkownika lub data się nie zgadza, utwórz nowy
+    if (!data[userId] || data[userId].date !== today) {
+      data[userId] = {
+        id: userId,
+        date: today,
+        usedToday: 0,
+        lastReset: new Date().toISOString()
+      };
+      
+      await this._saveData(data);
+    }
+    
+    return data[userId];
+  }
+
+  /**
+   * Zwiększa licznik wykorzystania API dla użytkownika
+   * @param {string} userId - ID użytkownika
+   * @returns {Promise<Object>} Zaktualizowane informacje o limitach
+   */
+  async incrementUsage(userId) {
+    const data = await this._loadData();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Jeśli nie ma rekordu dla tego użytkownika lub data się nie zgadza, utwórz nowy
+    if (!data[userId] || data[userId].date !== today) {
+      data[userId] = {
+        id: userId,
+        date: today,
+        usedToday: 0,
+        lastReset: new Date().toISOString()
+      };
+    }
+    
+    // Zwiększ licznik
+    data[userId].usedToday += 1;
+    data[userId].lastUpdate = new Date().toISOString();
+    
+    // Zapisz zmiany
+    await this._saveData(data);
+    
+    return data[userId];
+  }
+
+  /**
+   * Resetuje licznik wykorzystania API dla użytkownika
+   * @param {string} userId - ID użytkownika
+   * @returns {Promise<Object>} Zaktualizowane informacje o limitach
+   */
+  async resetUsage(userId) {
+    const data = await this._loadData();
+    const today = new Date().toISOString().split('T')[0];
+    
+    data[userId] = {
+      id: userId,
+      date: today,
+      usedToday: 0,
+      lastReset: new Date().toISOString()
+    };
+    
+    // Zapisz zmiany
+    await this._saveData(data);
+    
+    return data[userId];
+  }
+  
+  /**
+   * Pobiera statystyki wykorzystania API dla wszystkich użytkowników
+   * @returns {Promise<Object>} Statystyki wykorzystania
+   */
+  async getStats() {
+    const data = await this._loadData();
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Agregacja danych
+    const stats = {
+      totalUsers: Object.keys(data).length,
+      activeToday: 0,
+      totalRequestsToday: 0,
+      usersAtLimit: 0,
+      date: today
+    };
+    
+    // Limit dzienny
+    const maxDailyRequests = parseInt(process.env.AI_DAILY_LIMIT, 10) || 10;
+    
+    // Oblicz statystyki
+    for (const userId in data) {
+      const userRecord = data[userId];
+      
+      if (userRecord.date === today) {
+        stats.activeToday++;
+        stats.totalRequestsToday += userRecord.usedToday;
+        
+        if (userRecord.usedToday >= maxDailyRequests) {
+          stats.usersAtLimit++;
+        }
+      }
     }
     
     return stats;
   }
-  
-  /**
-   * Resetuje wszystkie liczniki zapytań
-   * @private
-   */
-  _resetCounters() {
-    this.requestCounts.clear();
-    console.log(`[${new Date().toISOString()}] API rate limit counters reset`);
-  }
 }
 
-// Eksportuj pojedynczą instancję
-const apiLimitManager = new ApiLimitManager();
-module.exports = apiLimitManager; 
+module.exports = ApiLimitManager; 

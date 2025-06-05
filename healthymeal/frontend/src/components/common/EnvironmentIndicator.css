@@ -1,0 +1,25 @@
+.environment-indicator {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.environment-badge {
+  margin: 5px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  opacity: 0.9;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+
+@media (max-width: 768px) {
+  .environment-badge {
+    font-size: 0.7rem;
+    padding: 3px 8px;
+  }
+} 

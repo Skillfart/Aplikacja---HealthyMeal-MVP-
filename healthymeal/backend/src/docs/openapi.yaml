@@ -1,0 +1,233 @@
+openapi: 3.0.0
+info:
+  title: HealthyMeal API
+  version: 1.0.0
+  description: API dla aplikacji HealthyMeal
+
+servers:
+  - url: http://localhost:3000/api
+    description: Serwer deweloperski
+  - url: https://api.healthymeal.com/api
+    description: Serwer produkcyjny
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        preferences:
+          type: object
+          properties:
+            dietType:
+              type: string
+              enum: [wszystko, wegetariańska, wegańska, bezglutenowa, ketogeniczna]
+            allergies:
+              type: array
+              items:
+                type: string
+            excludedIngredients:
+              type: array
+              items:
+                type: string
+            caloriesPerDay:
+              type: number
+            mealsPerDay:
+              type: number
+
+    Recipe:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        ingredients:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              quantity:
+                type: number
+              unit:
+                type: string
+        steps:
+          type: array
+          items:
+            type: string
+        preparationTime:
+          type: number
+        difficulty:
+          type: string
+          enum: [łatwy, średni, trudny]
+        servings:
+          type: number
+
+paths:
+  /auth/register:
+    post:
+      summary: Rejestracja nowego użytkownika
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        '201':
+          description: Użytkownik zarejestrowany
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Błędne dane
+        '409':
+          description: Email już istnieje
+
+  /auth/login:
+    post:
+      summary: Logowanie użytkownika
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Zalogowano pomyślnie
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Nieprawidłowe dane logowania
+
+  /recipes:
+    get:
+      summary: Pobierz przepisy użytkownika
+      tags: [Recipes]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Lista przepisów
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Recipe'
+        '401':
+          description: Brak autoryzacji
+
+    post:
+      summary: Dodaj nowy przepis
+      tags: [Recipes]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Recipe'
+      responses:
+        '201':
+          description: Przepis dodany
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipe'
+        '400':
+          description: Błędne dane
+        '401':
+          description: Brak autoryzacji
+
+  /recipes/{id}/modify:
+    post:
+      summary: Modyfikuj przepis używając AI
+      tags: [Recipes, AI]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                modifications:
+                  type: array
+                  items:
+                    type: string
+                    enum: [lowCarb, vegan, glutenFree, reducedCalories]
+      responses:
+        '200':
+          description: Przepis zmodyfikowany
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recipe'
+        '401':
+          description: Brak autoryzacji
+        '429':
+          description: Przekroczono dzienny limit modyfikacji AI 

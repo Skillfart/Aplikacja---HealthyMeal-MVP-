@@ -1,21 +1,21 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/user');
-const { verifyToken } = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 
-// Wszystkie poniższe trasy wymagają uwierzytelnienia
-router.use(verifyToken);
+// Wszystkie ścieżki są chronione przez middleware autoryzacji
+router.use(authMiddleware);
 
-// Pobierz profil użytkownika
+// Profil użytkownika
 router.get('/profile', userController.getProfile);
 
-// Pobierz preferencje użytkownika
-router.get('/preferences', userController.getPreferences);
-
-// Aktualizuj preferencje użytkownika
+// Preferencje użytkownika
 router.put('/preferences', userController.updatePreferences);
 
-// Zmień hasło użytkownika
-router.put('/password', userController.changePassword);
+// Sprawdzanie limitu AI
+router.get('/ai-usage', userController.checkAILimit);
+
+// Inkrementacja licznika AI
+router.post('/ai-usage/increment', userController.incrementAIUsage);
 
 module.exports = router; 

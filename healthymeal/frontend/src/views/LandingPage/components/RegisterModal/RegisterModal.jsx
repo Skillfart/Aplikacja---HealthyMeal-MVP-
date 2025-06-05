@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../../../../lib/supabase.js';
+import { useAuth } from '../../../../contexts/AuthContext';
 import styles from './RegisterModal.module.css';
 
 export const RegisterModal = ({ onClose, onLoginLinkClick }) => {
@@ -12,6 +12,7 @@ export const RegisterModal = ({ onClose, onLoginLinkClick }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
+  const { signUp } = useAuth();
   const { name, email, password, confirmPassword } = formData;
   
   const handleChange = (e) => {
@@ -44,30 +45,29 @@ export const RegisterModal = ({ onClose, onLoginLinkClick }) => {
     try {
       setLoading(true);
       
-      // Użyj Supabase Auth do rejestracji
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            name: name,
-            preferences: {
-              dietType: 'normal',
-              maxCarbs: 0,
-              excludedProducts: [],
-              allergens: []
-            }
-          }
-        }
-      });
+      // Dodaj dodatkowe logowanie dla debugowania
+      console.log('Próba rejestracji użytkownika z email:', email);
+      
+      // Używamy AuthContext do rejestracji
+      const { data, error: signUpError } = await signUp(email, password, name);
       
       if (signUpError) {
         console.error('Registration error:', signUpError);
+        
+        // Dodatkowe logowanie szczegółów błędu
+        console.log('Błąd rejestracji - szczegóły:', {
+          message: signUpError.message,
+          status: signUpError.status,
+          details: signUpError.details
+        });
         
         // Obsługa różnych błędów rejestracji
         switch (signUpError.message) {
           case 'User already registered':
             setError('Użytkownik o tym adresie email już istnieje');
+            break;
+          case 'Invalid API key':
+            setError('Błąd konfiguracji serwera - nieprawidłowy klucz API. Skontaktuj się z administratorem.');
             break;
           default:
             setError(`Błąd rejestracji: ${signUpError.message}`);

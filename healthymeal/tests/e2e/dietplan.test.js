@@ -2,8 +2,6 @@ const axios = require('axios');
 const { expect } = require('chai');
 
 describe('HealthyMeal Testy Generowania Planu Diety E2E', function() {
-  this.timeout(30000); // Zwiększony timeout - generowanie diety może trwać dłużej
-  
   const API_URL = 'http://localhost:3030/api';
   let authToken;
   let testUserId;

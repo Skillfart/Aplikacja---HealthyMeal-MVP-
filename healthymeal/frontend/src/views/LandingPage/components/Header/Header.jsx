@@ -13,7 +13,13 @@ export const Header = ({ onLoginClick, onRegisterClick }) => {
     <header className={styles.header}>
       <div className={styles.container}>
         <Link to="/" className={styles.logo}>
-          <img src="/logo.svg" alt="HealthyMeal Logo" className={styles.logoImage} />
+          <img 
+            src="/images/logo.svg" 
+            alt="HealthyMeal Logo" 
+            className={styles.logoImage} 
+            width="32" 
+            height="32" 
+          />
           <span className={styles.logoText}>HealthyMeal</span>
         </Link>
 

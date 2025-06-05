@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const ingredientController = require('../controllers/ingredient');
-const { verifyToken } = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
 // Wszystkie poniższe trasy wymagają uwierzytelnienia
-router.use(verifyToken);
+router.use(auth);
 
 // Pobierz wszystkie składniki
 router.get('/', ingredientController.getAllIngredients);

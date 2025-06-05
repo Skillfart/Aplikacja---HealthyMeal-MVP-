@@ -340,3 +340,26 @@ flowchart TD
 - Uwierzytelnianie przez Magic Link (bez hasła)
 - Zarządzanie rolami użytkowników
 - System zaproszeń i współdzielenia przepisów 
+
+## 12. Testowanie komponentów autentykacji
+
+### 12.1 Atrybuty testowe
+Komponenty związane z autentykacją powinny zawierać następujące atrybuty testowe (data-testid):
+
+- `login-form` - formularz logowania
+- `login-page` - strona logowania
+- `email-input` - pole wprowadzania adresu email
+- `password-input` - pole wprowadzania hasła
+- `login-button` - przycisk logowania
+- `register-page` - strona rejestracji
+- `password-reset-page` - strona resetowania hasła
+- `success-message` - komunikat o powodzeniu operacji
+- `error-message` - komunikat o błędzie
+
+### 12.2 Środowisko testowe
+Do testowania komponentów autentykacji zaleca się:
+
+1. Utworzenie oddzielnego projektu w Supabase przeznaczonego do testów
+2. Konfigurację zmiennych środowiskowych w pliku `.env.test` lub `cypress.env.json`
+3. Wykorzystanie konta testowego utworzonego specjalnie do celów testowych
+4. Izolację testów, aby zapobiec wzajemnemu wpływaniu na siebie 

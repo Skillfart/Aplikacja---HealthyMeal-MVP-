@@ -1,14 +1,22 @@
-// W tym pliku należy skonfigurować połączenie z bazą danych MongoDB
+// Konfiguracja połączenia z bazą danych MongoDB
+const dotenv = require('dotenv');
+const path = require('path');
+
+// Załaduj odpowiedni plik .env
+const envFile = process.env.NODE_ENV ? `.env.${process.env.NODE_ENV}` : '.env.development';
+dotenv.config({ path: path.resolve(process.cwd(), envFile) });
+
 module.exports = {
   mongodb: {
-    url: "mongodb://localhost:27017",
-    databaseName: "healthymeal",
+    url: process.env.MONGODB_URI || "mongodb://localhost:27017/healthymeal",
     options: {
-      // brak dodatkowych opcji
+      useNewUrlParser: true,
+      useUnifiedTopology: true
     }
   },
-  migrationsDir: "migrations-files",  // katalog z plikami migracji
+  migrationsDir: "migrations",
   changelogCollectionName: "changelog",
   migrationFileExtension: ".js",
-  useFileHash: false
+  useFileHash: false,
+  moduleSystem: 'commonjs'
 }; 

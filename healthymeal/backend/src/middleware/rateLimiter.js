@@ -2,6 +2,33 @@
  * Middleware do ograniczania liczby zapytań do API
  */
 const apiLimitManager = require('../services/apiLimitManager');
+const rateLimit = require('express-rate-limit');
+const config = require('../config/env');
+
+// Konfiguracja podstawowego rate limitera
+const createRateLimiter = (options = {}) => {
+  const {
+    windowMs = 15 * 60 * 1000, // 15 minut
+    max = 100, // limit 100 żądań na okno czasowe
+    message = 'Too many requests, please try again later.',
+    keyGenerator = (req) => req.ip,
+    skip = (req) => false
+  } = options;
+
+  return rateLimit({
+    windowMs,
+    max,
+    message: { error: message },
+    keyGenerator,
+    skip,
+    handler: (req, res) => {
+      res.status(429).json({
+        error: message,
+        retryAfter: Math.ceil(windowMs / 1000)
+      });
+    }
+  });
+};
 
 /**
  * Middleware do ograniczania liczby zapytań
@@ -58,7 +85,50 @@ function aiApiLimiter(req, res, next) {
     });
 }
 
+// Ograniczenie dla API
+const apiLimiter = rateLimit({
+  windowMs: config.rateLimits?.api?.windowMs || 15 * 60 * 1000, // 15 minut
+  max: config.rateLimits?.api?.max || 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 429,
+    success: false,
+    message: 'Zbyt wiele zapytań. Proszę spróbować ponownie później.'
+  }
+});
+
+// Ograniczenie dla autentykacji
+const authLimiter = rateLimit({
+  windowMs: config.rateLimits?.auth?.windowMs || 15 * 60 * 1000, // 15 minut
+  max: config.rateLimits?.auth?.max || 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 429,
+    success: false,
+    message: 'Zbyt wiele prób logowania. Proszę spróbować ponownie później.'
+  }
+});
+
+// Ograniczenie dla AI
+const aiLimiter = rateLimit({
+  windowMs: config.rateLimits?.ai?.windowMs || 15 * 60 * 1000, // 15 minut
+  max: config.rateLimits?.ai?.max || 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 429,
+    success: false,
+    message: 'Przekroczono dzienny limit zapytań AI. Proszę spróbować ponownie jutro.'
+  }
+});
+
 module.exports = {
+  createRateLimiter,
   rateLimiter,
-  aiApiLimiter
+  aiApiLimiter,
+  authLimiter,
+  apiLimiter,
+  aiLimiter
 }; 

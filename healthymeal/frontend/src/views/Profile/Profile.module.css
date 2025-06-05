@@ -47,11 +47,34 @@
 
 .profileContainer {
   max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-  background-color: #ffffff;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: #4a5568;
+}
+
+.error {
+  color: #e53e3e;
+  text-align: center;
+  padding: 1rem;
+  margin: 1rem 0;
+  background: #fff5f5;
+  border-radius: 4px;
+}
+
+.success {
+  color: #2e7d32;
+  background-color: #e8f5e9;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 20px;
 }
 
 h2 {
@@ -62,93 +85,183 @@ h2 {
 }
 
 .section {
-  margin-bottom: 30px;
-  padding: 15px;
-  background-color: #f9f9f9;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: #f8f9fa;
   border-radius: 6px;
 }
 
 h3 {
   margin-top: 0;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
   color: #444;
   font-size: 1.2rem;
 }
 
 .infoItem {
   display: flex;
-  margin-bottom: 12px;
-  align-items: flex-start;
+  margin: 1rem 0;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
 }
 
 .label {
-  min-width: 200px;
+  flex: 0 0 200px;
   font-weight: 600;
-  color: #555;
+  color: #4a5568;
 }
 
 .value {
   flex: 1;
-  color: #333;
-  word-break: break-word;
+  color: #2d3748;
 }
 
 .editButton {
-  padding: 8px 16px;
-  background-color: #4caf50;
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background-color: #48bb78;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
-  margin-top: 15px;
-  font-weight: 500;
   transition: background-color 0.2s;
 }
 
 .editButton:hover {
-  background-color: #388e3c;
+  background-color: #38a169;
 }
 
-.usageBar {
-  height: 10px;
-  background-color: #e0e0e0;
-  border-radius: 5px;
-  margin: 8px 0;
-  overflow: hidden;
+.editButton:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
 }
 
-.usageProgress {
-  height: 100%;
-  background-color: #4caf50;
-  transition: width 0.3s ease;
+/* Style dla formularza */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
-.resetInfo {
-  font-size: 0.85rem;
-  color: #757575;
-  margin-top: 5px;
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-.loading, .error, .notFound {
-  text-align: center;
-  padding: 40px;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  margin: 20px auto;
-  max-width: 800px;
+.formGroup label {
+  font-weight: 600;
+  color: #4a5568;
 }
 
-.loading {
-  color: #2196f3;
+.input,
+.select,
+.textarea {
+  padding: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 1rem;
+  width: 100%;
 }
 
-.error {
-  color: #f44336;
+.textarea {
+  min-height: 100px;
+  resize: vertical;
 }
 
-.notFound {
-  color: #ff9800;
+.select {
+  background-color: white;
+}
+
+.buttonGroup {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.saveButton,
+.cancelButton {
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.saveButton {
+  background-color: #48bb78;
+  color: white;
+  border: none;
+}
+
+.saveButton:hover {
+  background-color: #38a169;
+}
+
+.cancelButton {
+  background-color: #e2e8f0;
+  color: #4a5568;
+  border: 1px solid #cbd5e0;
+}
+
+.cancelButton:hover {
+  background-color: #cbd5e0;
+}
+
+.excludedProducts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.excludedProduct {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: #e3f2fd;
+  border-radius: 16px;
+  font-size: 0.9rem;
+}
+
+.removeButton {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 1.2rem;
+  padding: 0;
+  line-height: 1;
+}
+
+.removeButton:hover {
+  color: #d32f2f;
+}
+
+.checkboxGroup {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 30px;
 }
 
 @media (max-width: 768px) {

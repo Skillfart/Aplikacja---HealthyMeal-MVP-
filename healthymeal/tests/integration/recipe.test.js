@@ -268,8 +268,6 @@ const testRecipes = [
 ];
 
 describe('Testy integracyjne przepisów', function() {
-  this.timeout(10000); // Zwiększenie limitu czasu dla testów
-
   // Logowanie i przygotowanie
   before(async function() {
     try {

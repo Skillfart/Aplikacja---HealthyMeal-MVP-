@@ -1,152 +1,196 @@
-const User = require('../models/User');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
 const { createClient } = require('@supabase/supabase-js');
+const { validateRegistration, validateLogin } = require('../validators/authValidator');
+const { AuthError } = require('../errors/AuthError');
+const logger = require('../utils/logger');
 const config = require('../config/env');
+const User = require('../models/User');
 
 // Inicjalizacja klienta Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL || config.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY || config.SUPABASE_SERVICE_KEY
-);
+const supabase = createClient(config.supabaseUrl, config.SUPABASE_ANON_KEY);
 
 /**
- * Rejestracja użytkownika - zmieniona by przekazywać sukces bez tworzenia użytkownika
- * Ponieważ używamy Supabase do autentykacji
+ * Kontroler autentykacji
+ * @class AuthController
  */
-exports.register = async (req, res) => {
-  try {
-    console.log('Backend symuluje rejestrację, używamy Supabase Auth');
-    
-    // Zwracamy sukces bez faktycznego tworzenia użytkownika w MongoDB
-    res.status(201).json({
-      message: 'Użytkownik zarejestrowany pomyślnie (symulacja - używamy Supabase)',
-      token: 'fake-jwt-token-because-we-use-supabase',
-      user: {
-        id: 'fake-user-id',
-        email: req.body.email,
-        preferences: {
-          dietType: 'normal',
-          maxCarbs: 0,
-          excludedProducts: [],
-          allergens: []
-        }
+class AuthController {
+  /**
+   * Rejestracja nowego użytkownika
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  async register(req, res) {
+    try {
+      // Walidacja danych wejściowych
+      const { error: validationError } = validateRegistration(req.body);
+      if (validationError) {
+        throw new AuthError('Nieprawidłowe dane rejestracji', 400, validationError.details);
       }
-    });
-  } catch (error) {
-    console.error('Błąd symulacji rejestracji:', error);
-    res.status(500).json({ message: 'Błąd serwera podczas rejestracji' });
-  }
-};
 
-/**
- * Logowanie użytkownika - zmienione by przekazywać sukces bez faktycznej weryfikacji
- * Ponieważ używamy Supabase do autentykacji
- */
-exports.login = async (req, res) => {
-  try {
-    console.log('Backend symuluje logowanie, używamy Supabase Auth');
-    
-    // Zwracamy sukces bez faktycznej weryfikacji użytkownika w MongoDB
-    res.status(200).json({
-      message: 'Zalogowano pomyślnie (symulacja - używamy Supabase)',
-      token: 'fake-jwt-token-because-we-use-supabase',
-      user: {
-        id: 'fake-user-id',
-        email: req.body.email,
-        preferences: {
-          dietType: 'normal',
-          maxCarbs: 0,
-          excludedProducts: [],
-          allergens: []
-        },
-        aiUsage: {
-          date: new Date(),
-          count: 0
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Błąd symulacji logowania:', error);
-    res.status(500).json({ message: 'Błąd serwera podczas logowania' });
-  }
-};
+      const { email, password } = req.body;
 
-/**
- * Weryfikacja tokenu Supabase - endpoint pomocniczy
- * Użyteczne dla frontendu do sprawdzenia ważności tokenu bez pobierania dodatkowych danych
- */
-exports.verifyToken = async (req, res) => {
-  try {
-    const { token } = req.body;
-    
-    if (!token) {
-      return res.status(400).json({ message: 'Token is required' });
-    }
-    
-    // Weryfikacja tokenu w Supabase
-    const { data, error } = await supabase.auth.getUser(token);
-    
-    if (error) {
-      return res.status(401).json({ 
-        message: 'Invalid or expired token',
-        valid: false 
+      // Rejestracja użytkownika w Supabase
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password
       });
-    }
-    
-    return res.status(200).json({ 
-      message: 'Token is valid',
-      valid: true,
-      user: data.user
-    });
-  } catch (error) {
-    console.error('Token verification error:', error);
-    return res.status(500).json({ message: 'Error verifying token' });
-  }
-};
 
-/**
- * Pobieranie danych profilu użytkownika
- * Używa tokenu Supabase do identyfikacji użytkownika
- */
-exports.getProfile = async (req, res) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
-    
-    // Weryfikacja tokenu w Supabase
-    const { data, error } = await supabase.auth.getUser(token);
-    
-    if (error) {
-      return res.status(401).json({ message: 'Invalid or expired token' });
-    }
-    
-    // Pobranie dodatkowych danych profilu z Supabase
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
-    
-    if (profileError && !profileError.message.includes('No row found')) {
-      console.error('Profile fetch error:', profileError);
-      return res.status(500).json({ message: 'Error fetching profile data' });
-    }
-    
-    res.status(200).json({
-      user: data.user,
-      profile: profileData || { 
-        diet_type: 'normal',
-        max_carbs: 0,
-        excluded_products: [],
-        allergens: []
+      if (error) {
+        throw new AuthError('Błąd rejestracji', 400, error.message);
       }
-    });
-  } catch (error) {
-    console.error('Profile fetch error:', error);
-    res.status(500).json({ message: 'Error fetching profile' });
+
+      // Utworzenie użytkownika w MongoDB
+      const mongoUser = await User.create({
+        email: email,
+        supabaseId: data.user.id,
+        preferences: {
+          dietType: 'normal',
+          maxCarbs: 0,
+          excludedProducts: [],
+          allergens: []
+        }
+      });
+
+      logger.info('Zarejestrowano nowego użytkownika', { email, mongoId: mongoUser._id });
+
+      res.status(201).json({
+        message: 'Użytkownik zarejestrowany pomyślnie',
+        token: data.session.access_token,
+        user: {
+          id: mongoUser._id,
+          email: mongoUser.email,
+          preferences: mongoUser.preferences,
+          aiUsage: mongoUser.aiUsage
+        }
+      });
+    } catch (error) {
+      logger.error('Błąd podczas rejestracji', { error });
+      throw error;
+    }
   }
-}; 
+
+  /**
+   * Logowanie użytkownika
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  async login(req, res) {
+    try {
+      // Walidacja danych wejściowych
+      const { error: validationError } = validateLogin(req.body);
+      if (validationError) {
+        throw new AuthError('Nieprawidłowe dane logowania', 400, validationError.details);
+      }
+
+      const { email, password } = req.body;
+
+      // Logowanie użytkownika w Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        throw new AuthError('Nieprawidłowe dane logowania', 401, error.message);
+      }
+
+      // Pobierz lub utwórz użytkownika w MongoDB
+      let mongoUser = await User.findOne({ supabaseId: data.user.id });
+      
+      if (!mongoUser) {
+        // Jeśli użytkownik nie istnieje w MongoDB, utwórz go
+        mongoUser = await User.create({
+          email: email,
+          supabaseId: data.user.id,
+          preferences: {
+            dietType: 'normal',
+            maxCarbs: 0,
+            excludedProducts: [],
+            allergens: []
+          }
+        });
+        logger.info('Utworzono nowego użytkownika w MongoDB', { email, mongoId: mongoUser._id });
+      }
+
+      // Aktualizuj datę ostatniego logowania
+      mongoUser.lastLogin = new Date();
+      await mongoUser.save();
+
+      logger.info('Zalogowano użytkownika', { email, mongoId: mongoUser._id });
+
+      res.json({
+        message: 'Zalogowano pomyślnie',
+        token: data.session.access_token,
+        user: {
+          id: mongoUser._id,
+          email: mongoUser.email,
+          preferences: mongoUser.preferences,
+          aiUsage: mongoUser.aiUsage
+        }
+      });
+    } catch (error) {
+      logger.error('Błąd podczas logowania', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Wylogowanie użytkownika
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  async logout(req, res) {
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        throw new AuthError('Błąd wylogowania', 400, error.message);
+      }
+
+      logger.info('Wylogowano użytkownika');
+
+      res.json({
+        message: 'Wylogowano pomyślnie'
+      });
+    } catch (error) {
+      logger.error('Błąd podczas wylogowania', { error });
+      throw error;
+    }
+  }
+
+  /**
+   * Sprawdzenie statusu sesji użytkownika
+   * @param {Object} req - Express request object
+   * @param {Object} res - Express response object
+   */
+  async checkSession(req, res) {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+
+      if (error || !session) {
+        throw new AuthError('Brak aktywnej sesji', 401);
+      }
+
+      // Pobierz dane użytkownika z MongoDB
+      const mongoUser = await User.findOne({ supabaseId: session.user.id });
+      
+      if (!mongoUser) {
+        throw new AuthError('Nie znaleziono użytkownika', 404);
+      }
+
+      res.json({
+        message: 'Sesja aktywna',
+        user: {
+          id: mongoUser._id,
+          email: mongoUser.email,
+          preferences: mongoUser.preferences,
+          aiUsage: mongoUser.aiUsage
+        }
+      });
+    } catch (error) {
+      logger.error('Błąd podczas sprawdzania sesji', { error });
+      throw error;
+    }
+  }
+}
+
+module.exports = new AuthController(); 

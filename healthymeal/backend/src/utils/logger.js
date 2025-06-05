@@ -2,77 +2,62 @@
  * Prosty logger dla aplikacji, obsługujący różne poziomy logowania
  */
 
-const LOG_LEVELS = {
-  ERROR: 0,
-  WARN: 1,
-  INFO: 2,
-  DEBUG: 3
-};
+const winston = require('winston');
+const path = require('path');
 
-// Domyślny poziom logowania na podstawie środowiska
-const currentLevel = process.env.NODE_ENV === 'production' 
-  ? LOG_LEVELS.WARN 
-  : LOG_LEVELS.DEBUG;
+// Konfiguracja formatowania logów
+const logFormat = winston.format.combine(
+  winston.format.timestamp(),
+  winston.format.errors({ stack: true }),
+  winston.format.printf(({ level, message, timestamp, stack }) => {
+    return `${timestamp} ${level}: ${message}${stack ? '\n' + stack : ''}`;
+  })
+);
 
-/**
- * Formatuje wiadomość do logowania
- * @param {string} level - Poziom logowania
- * @param {string} message - Wiadomość
- * @returns {string} - Sformatowana wiadomość
- */
-const formatMessage = (level, message) => {
-  const timestamp = new Date().toISOString();
-  return `[${timestamp}] [${level}] ${message}`;
-};
+// Konfiguracja loggera
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: logFormat,
+  transports: [
+    // Zapisuj wszystkie logi do pliku
+    new winston.transports.File({
+      filename: path.join(__dirname, '../../logs/error.log'),
+      level: 'error',
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+    new winston.transports.File({
+      filename: path.join(__dirname, '../../logs/combined.log'),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+  ],
+});
 
-/**
- * Loguje wiadomość na poziomie DEBUG
- * @param {string} message - Wiadomość do zalogowania
- */
-const debug = (message) => {
-  if (currentLevel >= LOG_LEVELS.DEBUG) {
-    console.log(formatMessage('DEBUG', message));
-  }
-};
+// Jeśli nie jesteśmy w produkcji, loguj również do konsoli
+if (process.env.NODE_ENV !== 'production') {
+  logger.add(new winston.transports.Console({
+    format: winston.format.combine(
+      winston.format.colorize(),
+      winston.format.simple()
+    ),
+  }));
+}
 
-/**
- * Loguje wiadomość na poziomie INFO
- * @param {string} message - Wiadomość do zalogowania
- */
-const info = (message) => {
-  if (currentLevel >= LOG_LEVELS.INFO) {
-    console.log(formatMessage('INFO', message));
-  }
-};
-
-/**
- * Loguje wiadomość na poziomie WARN
- * @param {string} message - Wiadomość do zalogowania
- */
-const warn = (message) => {
-  if (currentLevel >= LOG_LEVELS.WARN) {
-    console.warn(formatMessage('WARN', message));
-  }
-};
-
-/**
- * Loguje wiadomość na poziomie ERROR
- * @param {string} message - Wiadomość do zalogowania
- * @param {Error} [error] - Opcjonalny obiekt błędu
- */
-const error = (message, error) => {
-  if (currentLevel >= LOG_LEVELS.ERROR) {
-    console.error(formatMessage('ERROR', message));
-    
-    if (error && error instanceof Error) {
-      console.error(error.stack || error.message);
-    }
-  }
+// Middleware do logowania requestów HTTP
+const logRequest = (req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    logger.info(`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
+  });
+  next();
 };
 
 module.exports = {
-  debug,
-  info,
-  warn,
-  error
+  error: logger.error.bind(logger),
+  warn: logger.warn.bind(logger),
+  info: logger.info.bind(logger),
+  debug: logger.debug.bind(logger),
+  logRequest
 }; 

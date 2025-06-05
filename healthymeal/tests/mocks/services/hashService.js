@@ -1,12 +1,10 @@
-/**
- * Mock dla hashService.js
- */
-module.exports = {
-  generateHash: (input) => {
-    return Buffer.from(JSON.stringify(input)).toString('base64');
-  },
-  
-  generateRecipeHash: (recipeId, userPreferences) => {
-    return Buffer.from(`${recipeId}_${JSON.stringify(userPreferences)}`).toString('base64');
-  }
+import crypto from 'crypto';
+
+export function generateHash(input) {
+  const stringInput = typeof input === 'string' ? input : JSON.stringify(input);
+  return crypto.createHash('sha256').update(stringInput).digest('hex');
+}
+
+export default {
+  generateHash
 }; 

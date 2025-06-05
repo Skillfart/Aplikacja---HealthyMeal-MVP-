@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const feedbackController = require('../controllers/feedback');
-const { verifyToken } = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
 // Wszystkie poniższe trasy wymagają uwierzytelnienia
-router.use(verifyToken);
+router.use(auth);
 
 // Pobierz wszystkie zgłoszenia użytkownika
 router.get('/', feedbackController.getUserFeedbacks);

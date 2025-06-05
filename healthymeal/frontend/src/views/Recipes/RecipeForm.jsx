@@ -216,13 +216,7 @@ export const RecipeForm = () => {
           return;
         }
 
-        // Sprawdź czy nazwa składnika nie zawiera znaków specjalnych
-        const nameRegex = /^[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ0-9\s-]+$/;
-        if (!nameRegex.test(ing.name.trim())) {
-          setError(`Nieprawidłowy format składnika na pozycji ${i+1}. Podaj nazwę lub ID składnika. Sprawdź oprócz składniki - podaj tylko nazwy bez specjalnych znaków.`);
-          setSubmitting(false);
-          return;
-        }
+        // Usunięto walidację znaków specjalnych - zamiast tego sanityzujemy dane
         
         // Sprawdź czy składnik ma ilość
         if (ing.quantity === undefined || ing.quantity.toString().trim() === '') {
@@ -246,6 +240,16 @@ export const RecipeForm = () => {
         return;
       }
       
+      // Funkcja do sanityzacji nazwy składnika - usuwa znaki specjalne
+      const sanitizeIngredientName = (name) => {
+        if (!name) return '';
+        // Usuwamy wszystkie znaki specjalne oprócz liter, cyfr, myślników i spacji
+        // Zachowujemy polskie znaki diakrytyczne
+        return name.trim()
+          .replace(/[^\p{L}\p{N}\s-]/gu, '')
+          .toLowerCase();
+      };
+      
       // Przygotowanie listy składników w poprawnym formacie
       const preparedIngredients = [];
       
@@ -257,7 +261,7 @@ export const RecipeForm = () => {
           return;
         }
         
-        const ingredientName = ing.name ? ing.name.trim() : '';
+        const ingredientName = ing.name ? sanitizeIngredientName(ing.name) : '';
         
         // Przywracamy strukturę wymaganą przez backend, ale bez _id
         preparedIngredients.push({
@@ -334,8 +338,7 @@ export const RecipeForm = () => {
         
         // Obsługa różnych formatów błędów z serwera
         if (err.response.data && err.response.data.message) {
-          setError(`Wystąpił błąd podczas zapisywania przepisu: ${err.response.data.message}. 
-                   Spróbuj uprościć składniki - podaj tylko nazwy bez specjalnych znaków.`);
+          setError(`Wystąpił błąd podczas zapisywania przepisu: ${err.response.data.message}`);
         } else if (err.response.data && err.response.data.error) {
           setError(`Wystąpił błąd: ${err.response.data.error}`);
         } else if (typeof err.response.data === 'string') {

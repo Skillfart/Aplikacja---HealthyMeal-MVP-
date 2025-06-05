@@ -1,5 +1,5 @@
 const { expect } = require('chai');
-const { generateHash, generateRecipeHash } = require('../../mocks/services/hashService');
+const { generateHash, generateRecipeHash } = require('../../mocks/services/hashService.cjs');
 
 describe('Hash Service', () => {
   describe('generateHash', () => {

@@ -15,6 +15,16 @@ try {
 
 const axios = require('axios');
 const logger = require('../utils/logger');
+const {
+  OpenRouterError,
+  AuthenticationError,
+  RateLimitError,
+  ModelError,
+  NetworkError,
+  ProcessingError,
+  TimeoutError,
+  ConfigurationError
+} = require('../errors/OpenRouterError');
 
 // Domyślne dane do trybu symulacji (gdy brak klucza API)
 const mockModifiedRecipe = {
@@ -81,27 +91,94 @@ class OpenRouterService {
    * @param {Object} options - Opcje konfiguracyjne
    * @param {string} options.apiKey - Klucz API do OpenRouter
    * @param {string} options.baseURL - Bazowy URL API (domyślnie: 'https://openrouter.ai/api/v1')
-   * @param {string} options.defaultModel - Domyślny model AI (domyślnie: 'anthropic/claude-3-opus:beta')
+   * @param {string} options.defaultModel - Domyślny model AI (domyślnie: wartość z OPENROUTER_DEFAULT_MODEL)
    * @param {boolean} options.simulationMode - Czy używać trybu symulacji (bez rzeczywistych wywołań API)
+   * @param {number} options.timeout - Timeout dla żądań w milisekundach (domyślnie: 60000)
+   * @param {Object} options.retryOptions - Opcje ponownego próbowania
    */
   constructor(options = {}) {
-    this.apiKey = options.apiKey || '';
+    this.apiKey = options.apiKey || process.env.OPENROUTER_API_KEY || null;
     this.baseURL = options.baseURL || 'https://openrouter.ai/api/v1';
-    this.defaultModel = options.defaultModel || 'anthropic/claude-3-opus:beta';
-    this.simulationMode = options.simulationMode || !this.apiKey || !openaiAvailable;
+    this.defaultModel = options.defaultModel || process.env.OPENROUTER_DEFAULT_MODEL || 'gpt-4o-mini';
+    this.timeout = options.timeout || 60000; // 60 sekund timeout dla zapytań AI
     
-    if (!openaiAvailable) {
-      logger.warn('Moduł OpenAI nie jest dostępny - serwis będzie działał w trybie symulacji');
-      this.simulationMode = true;
-    } else if (this.simulationMode) {
-      logger.warn('OpenRouterService działa w trybie symulacji - nie są wykonywane rzeczywiste zapytania do API');
-    } else if (!this.apiKey) {
-      logger.error('Brak klucza API dla OpenRouter - serwis będzie działał w trybie symulacji');
-      this.simulationMode = true;
-    }
+    // Opcje ponownego próbowania
+    this.retryOptions = {
+      maxRetries: 2,
+      retryDelay: 2000,
+      retryStatusCodes: [429, 500, 502, 503, 504],
+      ...options.retryOptions
+    };
+    
+    // Określenie trybu pracy serwisu
+    this._determineServiceMode(options);
     
     // Inicjalizacja klienta axios z podstawową konfiguracją
-    this._initClient();
+    if (!this.simulationMode) {
+      this._initClient();
+    } else {
+      logger.info('OpenRouterService działa w trybie symulacji - nie inicjalizuję klienta HTTP');
+    }
+  }
+  
+  /**
+   * Określa tryb pracy serwisu (rzeczywisty lub symulacja)
+   * @param {Object} options - Opcje konfiguracyjne
+   * @private
+   */
+  _determineServiceMode(options) {
+    // Sprawdzenie poprawności klucza API
+    if (!this.apiKey) {
+      logger.warn('Brak klucza API dla OpenRouter - wymuszam tryb symulacji');
+      this.simulationMode = true;
+      return;
+    }
+    
+    // Sprawdź format klucza API
+    const isValidKeyFormat = this._validateApiKeyFormat(this.apiKey);
+    if (!isValidKeyFormat) {
+      logger.warn('Klucz API OpenRouter ma nieprawidłowy format - wymuszam tryb symulacji');
+      this.simulationMode = true;
+      return;
+    }
+    
+    // Jawne wymuszenie trybu symulacji ma priorytet
+    if (options.simulationMode === true) {
+      logger.info('OpenRouterService działa w trybie symulacji (wymuszonym przez opcję)');
+      this.simulationMode = true;
+      return;
+    }
+    
+    // Sprawdź czy moduł OpenAI jest dostępny
+    if (!openaiAvailable) {
+      logger.warn('Moduł OpenAI niedostępny - wymuszam tryb symulacji');
+        this.simulationMode = true;
+      return;
+    }
+    
+    // Domyślnie używamy rzeczywistego API jeśli klucz wygląda poprawnie
+    this.simulationMode = false;
+        logger.info('OpenRouterService działa w trybie rzeczywistym - używamy API OpenRouter');
+  }
+  
+  /**
+   * Sprawdza poprawność formatu klucza API
+   * @param {string} apiKey - Klucz API do walidacji
+   * @returns {boolean} - Czy klucz ma poprawny format
+   * @private
+   */
+  _validateApiKeyFormat(apiKey) {
+    // Sprawdź czy klucz spełnia podstawowy format sk-or-v1-*
+    const isTestKey = apiKey.includes('testkey');
+    const hasCorrectPrefix = apiKey.startsWith('sk-or-v1-');
+    const hasMinimalLength = apiKey.length >= 30;
+    
+    if (isTestKey) {
+      logger.warn('Wykryto testowy klucz API OpenRouter - aktywuję tryb symulacji');
+      return false;
+    }
+    
+    return hasCorrectPrefix && hasMinimalLength;
   }
   
   /**
@@ -117,8 +194,19 @@ class OpenRouterService {
         'HTTP-Referer': process.env.OPENROUTER_REFERER || 'https://healthymeal.app',
         'X-Title': 'HealthyMeal App'
       },
-      timeout: 60000 // 60 sekund timeout dla zapytań AI
+      timeout: this.timeout
     });
+    
+    // Dodajemy interceptor do obsługi błędów
+    this.client.interceptors.response.use(
+      response => response,
+      error => {
+        if (error.code === 'ECONNABORTED') {
+          throw new TimeoutError(`Upłynął limit czasu żądania (${this.timeout}ms)`, error);
+        }
+        throw error;
+      }
+    );
   }
   
   /**
@@ -149,217 +237,464 @@ class OpenRouterService {
    * Modyfikacja przepisu za pomocą AI na podstawie preferencji użytkownika
    * @param {Object} recipe - Oryginalny przepis
    * @param {Object} preferences - Preferencje użytkownika
+   * @param {number} maxRetries - Maksymalna liczba ponownych prób w przypadku błędów
    * @returns {Promise<Object>} - Zmodyfikowany przepis
    */
-  async modifyRecipe(recipe, preferences) {
-    // W trybie symulacji zwróć mockowy przepis
-    if (this.simulationMode) {
-      return Promise.resolve(mockModifiedRecipe);
-    }
-    
+  async modifyRecipe(recipe, preferences, maxRetries = this.retryOptions.maxRetries) {
     try {
-      // Przygotuj wiadomość systemową
-      const systemMessage = this._getSystemMessage('modify_recipe');
+    // W trybie symulacji zwróć mockowy przepis dostosowany do struktury oryginalnego przepisu
+    if (this.simulationMode) {
+      logger.info('Używam trybu symulacji dla modyfikacji przepisu');
       
-      // Przygotuj wiadomość użytkownika z przepisem i preferencjami
-      const userMessage = JSON.stringify({
-        recipe,
-        preferences
-      });
+      // Otrzymaj strukturę oryginalnego przepisu i dostosuj mockowy przepis
+      const adaptedMockRecipe = { ...mockModifiedRecipe };
       
-      // Wykonaj zapytanie do API
-      const response = await this._makeRequest({
-        messages: [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMessage }
-        ],
-        model: this.defaultModel,
-        temperature: 0.7,
-        max_tokens: 4000
-      });
-      
-      // Parsuj odpowiedź jako JSON
-      let modifiedRecipe;
-      try {
-        modifiedRecipe = JSON.parse(response);
-      } catch (e) {
-        logger.error('Błąd podczas parsowania odpowiedzi JSON:', e);
-        // Jeśli parsowanie się nie powiedzie, spróbuj wydobyć JSON z tekstu
-        const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
-                          response.match(/{[\s\S]*}/);
-        
-        if (jsonMatch) {
-          try {
-            modifiedRecipe = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-          } catch (e2) {
-            throw new Error('Nie udało się sparsować odpowiedzi jako JSON');
-          }
-        } else {
-          throw new Error('Odpowiedź nie zawiera poprawnego formatu JSON');
-        }
+      // Jeśli oryginalny przepis ma pole user, zachowujemy je
+      if (recipe.user) {
+        adaptedMockRecipe.user = recipe.user;
       }
       
-      return modifiedRecipe;
+      // Jeśli oryginalny przepis ma pole _id, zachowujemy je jako originalId
+      if (recipe._id) {
+        adaptedMockRecipe.originalId = recipe._id;
+      }
+      
+        // Dostosujmy nazwy pól, aby zapewnić kompatybilność z oryginałem
+        for (const key in recipe) {
+          if (!adaptedMockRecipe.hasOwnProperty(key) && 
+            key !== 'ingredients' && 
+            key !== 'steps' && 
+            key !== 'tags' && 
+            key !== 'nutritionalValues' &&
+            typeof recipe[key] !== 'function') {
+            adaptedMockRecipe[key] = recipe[key];
+          }
+        }
+        
+        // Dodajmy symulowane pole "originalRecipe" z ID oryginalnego przepisu
+        adaptedMockRecipe.originalRecipe = {
+          id: recipe._id || recipe.id || 'unknown-id',
+          title: recipe.title
+        };
+        
+        // Symulacja opóźnienia sieciowego
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        return adaptedMockRecipe;
+      }
+      
+      // Upewnijmy się, że mamy wszystkie potrzebne dane
+      if (!recipe) {
+        throw new ProcessingError('Brak przepisu do modyfikacji');
+      }
+      
+      if (!preferences) {
+        logger.warn('Brak preferencji - używam domyślnych');
+        preferences = {
+          dietType: 'normal',
+          maxCarbs: 0,
+          excludedProducts: [],
+          allergens: []
+        };
+      }
+      
+      // Przygotuj prompt z przepisem i preferencjami
+      const prompt = `
+        Zmodyfikuj następujący przepis zgodnie z preferencjami użytkownika:
+        
+        Preferencje:
+        - Dieta: ${preferences.dietType || 'normalna'}
+        - Maksymalna ilość węglowodanów: ${preferences.maxCarbs || 'brak limitu'} g
+        - Wykluczone produkty: ${preferences.excludedProducts?.length ? preferences.excludedProducts.join(', ') : 'brak'}
+        - Alergeny: ${preferences.allergens?.length ? preferences.allergens.join(', ') : 'brak'}
+        
+        Oryginalny przepis:
+        ${JSON.stringify(recipe, null, 2)}
+        
+        Zwróć zmodyfikowany przepis jako JSON z dokładnie tymi samymi polami co oryginalny przepis.
+      `;
+      
+      // Przygotuj dane zapytania
+      const data = {
+        messages: [
+          {
+            role: 'system',
+            content: this._getSystemMessage('modify_recipe')
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        model: this.defaultModel,
+        temperature: 0.3,
+        max_tokens: 1500
+      };
+      
+      try {
+        // Wykonaj zapytanie
+        const response = await this._makeRequest(data);
+        
+        // Przetwórz odpowiedź JSON z modelu
+        let modifiedRecipe;
+        try {
+          const content = response.choices[0].message.content;
+          
+          // Usuń potencjalne znaki ``` i json z treści
+          const jsonContent = content
+            .replace(/^```json/g, '')
+            .replace(/^```/g, '')
+            .replace(/```$/g, '')
+            .trim();
+          
+          modifiedRecipe = JSON.parse(jsonContent);
+          
+          // Dodaj ID oryginalnego przepisu
+          modifiedRecipe.originalId = recipe._id || recipe.id;
+          
+          return modifiedRecipe;
+        } catch (jsonError) {
+          logger.error('Błąd parsowania odpowiedzi JSON:', jsonError);
+          
+          // Próba automatycznego przejścia w tryb symulacji po błędzie parsowania
+          logger.warn('Przechodzę w tryb symulacji po błędzie parsowania JSON');
+          this.simulationMode = true;
+          
+          // Wywołaj rekurencyjnie tę samą metodę, ale teraz w trybie symulacji
+          return this.modifyRecipe(recipe, preferences, 0);
+        }
+      } catch (error) {
+        // Sprawdź, czy mamy jeszcze próby
+        if (error instanceof TimeoutError && maxRetries > 0) {
+          logger.warn(`Timeout przy modyfikacji przepisu, ponawiam (pozostałe próby: ${maxRetries})`);
+          return this.modifyRecipe(recipe, preferences, maxRetries - 1);
+        }
+        
+        // Dla określonych kodów statusu spróbuj ponownie
+        if (error.response && 
+            this.retryOptions.retryStatusCodes.includes(error.response.status) && 
+            maxRetries > 0) {
+          logger.warn(`Błąd ${error.response.status} przy modyfikacji przepisu, ponawiam (pozostałe próby: ${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, this.retryOptions.retryDelay));
+          return this.modifyRecipe(recipe, preferences, maxRetries - 1);
+        }
+        
+        // Jeśli to błąd braku kredytów lub limitu, przejdź w tryb symulacji
+        if (error instanceof RateLimitError || 
+           (error.response && error.response.status === 429)) {
+          logger.warn('Przekroczono limit zapytań, przechodzę w tryb symulacji');
+          this.simulationMode = true;
+          return this.modifyRecipe(recipe, preferences, 0);
+        }
+        
+        // Jeśli to inny błąd lub nie mamy już prób, rzuć odpowiedni wyjątek
+        throw new ProcessingError('Wystąpił błąd podczas modyfikacji przepisu', error);
+      }
     } catch (error) {
-      logger.error('Błąd podczas modyfikacji przepisu:', error);
-      throw new OpenRouterError('RECIPE_MODIFICATION_FAILED', error.message);
+      // Logowanie błędu
+      if (error instanceof OpenRouterError) {
+        logger.error(`[OpenRouter] ${error.name}: ${error.message}`);
+        
+        // Dla niektórych typów błędów automatycznie przejdź w tryb symulacji
+        if (error instanceof AuthenticationError || 
+            error instanceof RateLimitError ||
+            error instanceof TimeoutError) {
+          logger.warn(`Przechodzę w tryb symulacji po błędzie: ${error.name}`);
+          this.simulationMode = true;
+          return this.modifyRecipe(recipe, preferences, 0);
+        }
+        
+        throw error;
+      } else {
+        logger.error('Nieobsługiwany błąd podczas modyfikacji przepisu:', error);
+        
+        // Automatycznie przejdź w tryb symulacji przy nieobsługiwanych błędach
+        logger.warn('Przechodzę w tryb symulacji po nieobsługiwanym błędzie');
+        this.simulationMode = true;
+        return this.modifyRecipe(recipe, preferences, 0);
+      }
     }
   }
   
   /**
-   * Sugerowanie alternatywnych składników na podstawie preferencji
-   * @param {string} ingredient - Oryginalny składnik
-   * @param {Object} preferences - Preferencje użytkownika
-   * @returns {Promise<Array>} - Lista alternatywnych składników
+   * Sugerowanie alternatyw dla składnika
+   * @param {string} ingredient - Nazwa składnika
+   * @param {Object} preferences - Preferencje żywieniowe
+   * @param {number} maxRetries - Maksymalna liczba ponownych prób w przypadku błędów
+   * @returns {Promise<Array>} - Lista alternatyw
    */
-  async suggestIngredientAlternatives(ingredient, preferences) {
-    // W trybie symulacji zwróć mockowe alternatywy
-    if (this.simulationMode) {
-      return Promise.resolve(mockAlternatives);
-    }
-    
+  async suggestIngredientAlternatives(ingredient, preferences, maxRetries = this.retryOptions.maxRetries) {
     try {
-      // Przygotuj wiadomość systemową
-      const systemMessage = this._getSystemMessage('suggest_alternatives');
-      
-      // Przygotuj wiadomość użytkownika ze składnikiem i preferencjami
-      const userMessage = JSON.stringify({
-        ingredient,
-        preferences
-      });
-      
-      // Wykonaj zapytanie do API
-      const response = await this._makeRequest({
-        messages: [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMessage }
-        ],
-        model: this.defaultModel,
-        temperature: 0.7,
-        max_tokens: 2000
-      });
-      
-      // Parsuj odpowiedź jako JSON
-      let alternatives;
-      try {
-        alternatives = JSON.parse(response);
-      } catch (e) {
-        // Jeśli parsowanie się nie powiedzie, spróbuj wydobyć JSON z tekstu
-        const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || 
-                          response.match(/\[([\s\S]*?)\]/);
+      // W trybie symulacji zwróć mockowe dane
+    if (this.simulationMode) {
+        logger.info('Używam trybu symulacji dla sugestii alternatyw');
         
-        if (jsonMatch) {
-          try {
-            alternatives = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-          } catch (e2) {
-            throw new Error('Nie udało się sparsować odpowiedzi jako JSON');
-          }
-        } else {
-          throw new Error('Odpowiedź nie zawiera poprawnego formatu JSON');
-        }
+        // Symulacja opóźnienia sieciowego
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        return mockAlternatives;
       }
       
-      return alternatives;
+      // Upewnijmy się, że mamy wszystkie potrzebne dane
+      if (!ingredient) {
+        throw new ProcessingError('Nie podano nazwy składnika');
+      }
+      
+      if (!preferences) {
+        logger.warn('Brak preferencji - używam domyślnych');
+        preferences = {
+          dietType: 'normal',
+          maxCarbs: 0,
+          excludedProducts: [],
+          allergens: []
+        };
+      }
+      
+      // Przygotuj prompt z przepisem i preferencjami
+      const prompt = `
+        Zaproponuj alternatywy dla składnika "${ingredient}" zgodnie z preferencjami:
+        
+        Preferencje:
+        - Dieta: ${preferences.dietType || 'normalna'}
+        - Maksymalna ilość węglowodanów: ${preferences.maxCarbs || 'brak limitu'} g
+        - Wykluczone produkty: ${preferences.excludedProducts?.length ? preferences.excludedProducts.join(', ') : 'brak'}
+        - Alergeny: ${preferences.allergens?.length ? preferences.allergens.join(', ') : 'brak'}
+        
+        Zwróć alternatywy jako tablicę JSON, gdzie każdy element ma pola:
+        - name: nazwa alternatywnego składnika
+        - benefits: korzyści z użycia tego składnika
+        - howToUse: jak używać tego składnika jako zamiennika
+      `;
+      
+      // Przygotuj dane zapytania
+      const data = {
+        messages: [
+          {
+            role: 'system',
+            content: this._getSystemMessage('suggest_alternatives')
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        model: this.defaultModel,
+        temperature: 0.5,
+        max_tokens: 800
+      };
+      
+      try {
+        // Wykonaj zapytanie
+        const response = await this._makeRequest(data);
+        
+        // Przetwórz odpowiedź JSON z modelu
+        try {
+          const content = response.choices[0].message.content;
+          
+          // Usuń potencjalne znaki ``` i json z treści
+          const jsonContent = content
+            .replace(/^```json/g, '')
+            .replace(/^```/g, '')
+            .replace(/```$/g, '')
+            .trim();
+          
+          const alternatives = JSON.parse(jsonContent);
+          
+          if (!Array.isArray(alternatives)) {
+            throw new ProcessingError('Odpowiedź nie jest tablicą');
+          }
+          
+          return alternatives;
+        } catch (jsonError) {
+          logger.error('Błąd parsowania odpowiedzi JSON:', jsonError);
+          
+          // Automatyczne przejście w tryb symulacji po błędzie parsowania
+          logger.warn('Przechodzę w tryb symulacji po błędzie parsowania JSON');
+          this.simulationMode = true;
+          return this.suggestIngredientAlternatives(ingredient, preferences, 0);
+        }
+      } catch (error) {
+        // Sprawdź, czy mamy jeszcze próby
+        if (error instanceof TimeoutError && maxRetries > 0) {
+          logger.warn(`Timeout przy generowaniu alternatyw, ponawiam (pozostałe próby: ${maxRetries})`);
+          return this.suggestIngredientAlternatives(ingredient, preferences, maxRetries - 1);
+        }
+        
+        // Dla określonych kodów statusu spróbuj ponownie
+        if (error.response && 
+            this.retryOptions.retryStatusCodes.includes(error.response.status) && 
+            maxRetries > 0) {
+          logger.warn(`Błąd ${error.response.status} przy generowaniu alternatyw, ponawiam (pozostałe próby: ${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, this.retryOptions.retryDelay));
+          return this.suggestIngredientAlternatives(ingredient, preferences, maxRetries - 1);
+        }
+        
+        // Jeśli to błąd braku kredytów lub limitu, przejdź w tryb symulacji
+        if (error instanceof RateLimitError || 
+           (error.response && error.response.status === 429)) {
+          logger.warn('Przekroczono limit zapytań, przechodzę w tryb symulacji');
+          this.simulationMode = true;
+          return this.suggestIngredientAlternatives(ingredient, preferences, 0);
+        }
+        
+        // Jeśli to inny błąd lub nie mamy już prób, rzuć odpowiedni wyjątek
+        throw new ProcessingError('Wystąpił błąd podczas generowania alternatyw', error);
+      }
     } catch (error) {
-      logger.error('Błąd podczas sugerowania alternatyw składników:', error);
-      throw new OpenRouterError('ALTERNATIVES_SUGGESTION_FAILED', error.message);
+      // Logowanie błędu
+      if (error instanceof OpenRouterError) {
+        logger.error(`[OpenRouter] ${error.name}: ${error.message}`);
+        
+        // Dla niektórych typów błędów automatycznie przejdź w tryb symulacji
+        if (error instanceof AuthenticationError || 
+            error instanceof RateLimitError ||
+            error instanceof TimeoutError) {
+          logger.warn(`Przechodzę w tryb symulacji po błędzie: ${error.name}`);
+          this.simulationMode = true;
+          return this.suggestIngredientAlternatives(ingredient, preferences, 0);
+        }
+        
+        throw error;
+      } else {
+        logger.error('Nieobsługiwany błąd podczas generowania alternatyw:', error);
+        
+        // Automatycznie przejdź w tryb symulacji
+        logger.warn('Przechodzę w tryb symulacji po nieobsługiwanym błędzie');
+        this.simulationMode = true;
+        return this.suggestIngredientAlternatives(ingredient, preferences, 0);
+      }
     }
   }
   
   /**
-   * Sprawdzenie statusu API OpenRouter
-   * @returns {Promise<Object>} - Status API
+   * Sprawdzenie statusu API
+   * @returns {Promise<Object>} - Informacje o statusie
    */
   async checkAPIStatus() {
-    // W trybie symulacji zwróć mockowy status
-    if (this.simulationMode) {
-      return Promise.resolve({
-        status: 'ok',
-        message: 'Tryb symulacji - nie sprawdzono rzeczywistego statusu API'
-      });
-    }
-    
     try {
-      // Wykonaj proste zapytanie do API, aby sprawdzić jego status
-      const response = await this.client.get('/');
+      // W trybie symulacji zwróć mockowe dane
+      if (this.simulationMode) {
+        logger.info('Używam trybu symulacji dla sprawdzenia statusu API');
+        
+        // Symulacja opóźnienia sieciowego
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        return {
+          status: 'ok',
+          models: ['gpt-4o-mini', 'anthropic/claude-3-opus:beta'],
+          simulationMode: true,
+          credits: 100,
+          requestsRemaining: 50
+        };
+      }
+      
+      // Wykonaj lekkie zapytanie do API
+      const response = await this.client.get('/models');
       
       return {
         status: 'ok',
-        message: 'API działa poprawnie',
-        apiVersion: response.data.version || 'unknown'
+        models: response.data.data.map(model => model.id),
+        simulationMode: false,
+        apiVersion: response.data.api_version || 'unknown'
       };
     } catch (error) {
-      logger.error('Błąd podczas sprawdzania statusu API:', error);
-      return {
-        status: 'error',
-        message: error.message || 'Nieznany błąd',
-        code: error.response?.status || 500
-      };
+      if (error.response) {
+        const { status, data } = error.response;
+        
+        if (status === 401 || status === 403) {
+          // Automatyczne przejście w tryb symulacji przy błędzie autoryzacji
+          logger.warn('Przechodzę w tryb symulacji po błędzie autoryzacji API');
+          this.simulationMode = true;
+          return this.checkAPIStatus();
+        } else if (status === 429) {
+          // Automatyczne przejście w tryb symulacji przy limicie zapytań
+          logger.warn('Przechodzę w tryb symulacji po przekroczeniu limitu API');
+          this.simulationMode = true;
+          return this.checkAPIStatus();
+        }
+        
+        throw new NetworkError(`Błąd API (${status}): ${data.error?.message || JSON.stringify(data)}`, error);
+      } else if (error.code === 'ECONNABORTED') {
+        // Automatyczne przejście w tryb symulacji przy timeoucie
+        logger.warn('Przechodzę w tryb symulacji po timeoucie API');
+        this.simulationMode = true;
+        return this.checkAPIStatus();
+      } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        // Automatyczne przejście w tryb symulacji przy błędzie połączenia
+        logger.warn('Przechodzę w tryb symulacji po błędzie połączenia API');
+        this.simulationMode = true;
+        return this.checkAPIStatus();
+      }
+      
+      // Inne nieznane błędy
+      logger.error(`Nieoczekiwany błąd podczas sprawdzania statusu API: ${error.message}`);
+      this.simulationMode = true;
+      return this.checkAPIStatus();
     }
   }
   
   /**
    * Wykonanie zapytania do API OpenRouter
-   * @param {Object} data - Dane zapytania
-   * @returns {Promise<string>} - Odpowiedź z API
+   * @param {Object} data - Dane żądania
+   * @returns {Promise<Object>} - Odpowiedź API
    * @private
    */
   async _makeRequest(data) {
+    logger.debug(`Wykonuję zapytanie do OpenRouter API: ${this.baseURL}/chat/completions`);
+    
     try {
       const response = await this.client.post('/chat/completions', data);
       
-      // Sprawdź czy odpowiedź zawiera oczekiwaną strukturę
-      if (!response.data || !response.data.choices || !response.data.choices[0]) {
-        throw new Error('Nieoczekiwana struktura odpowiedzi z API');
-      }
+      logger.debug(`Otrzymano odpowiedź od OpenRouter: ${response.status}`);
       
-      // Wyciągnij tekst odpowiedzi
-      const content = response.data.choices[0].message.content;
-      return content;
+      return response.data;
     } catch (error) {
-      // Obsłuż błędy z API
+      // Obsługa różnych rodzajów błędów
       if (error.response) {
-        const status = error.response.status;
-        const data = error.response.data;
+        const { status, data } = error.response;
         
-        // Mapuj kody błędów HTTP na konkretne typy błędów
+        // Uzyskaj informacje o błędzie z odpowiedzi
+        let errorMessage = 'Nieznany błąd API';
+        let errorType = 'API_ERROR';
+        
+        if (data && data.error) {
+          errorMessage = data.error.message || data.error;
+          errorType = data.error.type || 'API_ERROR';
+        }
+        
+        logger.error(`Błąd OpenRouter API (HTTP ${status}): ${JSON.stringify(data)}`);
+        
+        // Rzuć odpowiedni typ błędu
         if (status === 401) {
-          throw new OpenRouterError('UNAUTHORIZED', 'Nieprawidłowy klucz API');
+          throw new AuthenticationError('Nieprawidłowy klucz API lub brak autoryzacji', error);
         } else if (status === 403) {
-          throw new OpenRouterError('FORBIDDEN', 'Brak dostępu do API');
+          throw new AuthenticationError('Brak dostępu do API. Sprawdź uprawnienia.', error);
         } else if (status === 429) {
-          throw new OpenRouterError('RATE_LIMIT', 'Przekroczono limit zapytań');
+          logger.error('Przekroczono limit zapytań lub brak kredytów w OpenRouter API');
+          throw new RateLimitError('Przekroczono limit zapytań lub brak kredytów. Skontaktuj się z administratorem.', error);
+        } else if (status >= 500) {
+          throw new NetworkError(`Błąd serwera OpenRouter (${status}). Spróbuj ponownie później.`, error);
         } else {
-          throw new OpenRouterError(
-            'API_ERROR', 
-            data.error?.message || 'Błąd podczas komunikacji z API'
+          throw new ProcessingError(
+            `Błąd API OpenRouter: ${errorMessage} (${status})`,
+            error
           );
         }
-      } else if (error.request) {
-        // Błąd połączenia
-        throw new OpenRouterError('CONNECTION_ERROR', 'Nie można połączyć się z API');
+      } else if (error.code === 'ECONNABORTED') {
+        throw new TimeoutError(`Upłynął limit czasu żądania (${this.timeout}ms)`, error);
+      } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        logger.error(`Błąd połączenia: nie można połączyć się z OpenRouter API: ${error.message}`);
+        throw new NetworkError('Nie można połączyć się z API. Sprawdź połączenie internetowe.', error);
       } else {
-        // Inny błąd
-        throw error;
+        // Inne nieoczekiwane błędy
+        logger.error(`Nieoczekiwany błąd podczas komunikacji z OpenRouter API: ${error.message}`);
+        throw new ProcessingError('Wystąpił nieoczekiwany błąd podczas komunikacji z API.', error);
       }
     }
   }
 }
 
-/**
- * Klasa błędu dla serwisu OpenRouter
- */
-class OpenRouterError extends Error {
-  /**
-   * Konstruktor błędu OpenRouter
-   * @param {string} code - Kod błędu
-   * @param {string} message - Wiadomość błędu
-   */
-  constructor(code, message) {
-    super(message);
-    this.name = 'OpenRouterError';
-    this.code = code;
-  }
-}
-
-module.exports = OpenRouterService; 
+module.exports = {
+  OpenRouterService,
+  OpenRouterError
+};

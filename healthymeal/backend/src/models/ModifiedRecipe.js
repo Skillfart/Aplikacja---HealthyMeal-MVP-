@@ -1,47 +1,37 @@
 const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
+const { Schema } = mongoose;
 
-const modifiedRecipeSchema = new mongoose.Schema({
+const modifiedRecipeSchema = new Schema({
   originalRecipe: {
-    _id: {
-      type: Schema.Types.ObjectId,
-      ref: 'Recipe',
-      required: true
-    },
-    title: {
-      type: String,
-      required: true
-    }
+    type: Schema.Types.ObjectId,
+    ref: 'Recipe',
+    required: true
+  },
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
   title: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    minlength: 3,
+    maxlength: 200
   },
-  user: {
-    _id: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    email: {
-      type: String,
-      required: true
-    }
+  description: {
+    type: String,
+    required: true,
+    minlength: 10,
+    maxlength: 2000
   },
   ingredients: [{
     ingredient: {
-      _id: {
-        type: Schema.Types.ObjectId,
-        ref: 'Ingredient',
-        required: true
-      },
-      name: {
-        type: String,
-        required: true
-      }
+      type: Schema.Types.ObjectId,
+      ref: 'Ingredient',
+      required: true
     },
-    quantity: {
+    amount: {
       type: Number,
       required: true,
       min: 0
@@ -49,119 +39,102 @@ const modifiedRecipeSchema = new mongoose.Schema({
     unit: {
       type: String,
       required: true,
-      trim: true
+      maxlength: 20
     },
-    isOptional: {
-      type: Boolean,
-      default: false
-    },
-    isModified: {
-      type: Boolean,
-      default: false
-    },
-    substitutionReason: {
+    notes: {
       type: String,
-      trim: true
+      maxlength: 200
     }
   }],
-  steps: [{
-    number: {
-      type: Number,
-      required: true,
-      min: 1
-    },
-    description: {
-      type: String,
-      required: true
-    },
-    estimatedTime: {
-      type: Number,
-      min: 0
-    },
-    isModified: {
-      type: Boolean,
-      default: false
-    },
-    modificationReason: {
-      type: String,
-      trim: true
-    }
+  instructions: [{
+    type: String,
+    required: true,
+    minlength: 10,
+    maxlength: 1000
   }],
   preparationTime: {
     type: Number,
-    min: 0
-  },
-  difficulty: {
-    type: String,
-    enum: ['easy', 'medium', 'hard'],
-    default: 'medium'
+    required: true,
+    min: 1
   },
   servings: {
     type: Number,
     required: true,
     min: 1
   },
-  tags: [{
+  difficulty: {
     type: String,
-    trim: true
-  }],
+    required: true,
+    enum: ['easy', 'medium', 'hard']
+  },
   nutritionalValues: {
-    totalCalories: {
+    calories: {
       type: Number,
       min: 0
     },
-    totalCarbs: {
+    protein: {
       type: Number,
       min: 0
     },
-    totalProtein: {
+    carbs: {
       type: Number,
       min: 0
     },
-    totalFat: {
+    fat: {
       type: Number,
       min: 0
     },
-    totalFiber: {
-      type: Number,
-      min: 0
-    },
-    caloriesPerServing: {
+    fiber: {
       type: Number,
       min: 0
     },
     carbsPerServing: {
       type: Number,
       min: 0
-    },
-    carbsReduction: {
-      type: Number
-    },
-    caloriesReduction: {
-      type: Number
     }
   },
-  changesDescription: {
+  modifications: {
+    ingredientsAdded: [{
+      type: Schema.Types.ObjectId,
+      ref: 'Ingredient'
+    }],
+    ingredientsRemoved: [{
+      type: Schema.Types.ObjectId,
+      ref: 'Ingredient'
+    }],
+    nutritionalChanges: {
+      calories: Number,
+      protein: Number,
+      carbs: Number,
+      fat: Number,
+      fiber: Number
+    }
+  },
+  tags: [{
     type: String,
-    required: true
-  },
-  aiPrompt: {
-    type: String
-  },
+    maxlength: 30
+  }],
   isDeleted: {
     type: Boolean,
     default: false
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
 }, {
   timestamps: true
 });
 
 // Indeksy
-modifiedRecipeSchema.index({ "user._id": 1, "isDeleted": 1 });
-modifiedRecipeSchema.index({ "originalRecipe._id": 1 });
-modifiedRecipeSchema.index({ "title": "text" });
-modifiedRecipeSchema.index({ "tags": 1 });
-modifiedRecipeSchema.index({ "isDeleted": 1 });
+modifiedRecipeSchema.index({ userId: 1, createdAt: -1 });
+modifiedRecipeSchema.index({ originalRecipe: 1 });
+modifiedRecipeSchema.index({ tags: 1 });
+modifiedRecipeSchema.index({ isDeleted: 1 });
 
 const ModifiedRecipe = mongoose.model('ModifiedRecipe', modifiedRecipeSchema);
 

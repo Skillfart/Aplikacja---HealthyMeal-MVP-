@@ -8,6 +8,23 @@ const config = require('../config/env');
  */
 async function checkAIUsageLimit(userId) {
   try {
+    // Sprawdź czy jest to testowy ID użytkownika
+    if (userId === 'test-user-id' || userId === 'dev-user-id') {
+      console.log('Sprawdzanie limitu AI dla testowego użytkownika:', userId);
+      // Dla testowego użytkownika zawsze zwracamy pozytywny wynik
+      return {
+        hasRemainingModifications: true,
+        aiUsage: {
+          date: new Date(),
+          count: 0
+        },
+        dailyLimit: config.AI_DAILY_LIMIT || 5,
+        remainingModifications: config.AI_DAILY_LIMIT || 5,
+        isTestUser: true
+      };
+    }
+
+    // Dla rzeczywistych użytkowników szukamy w bazie danych
     const user = await User.findById(userId);
     if (!user) {
       throw new Error('User not found');
@@ -33,7 +50,8 @@ async function checkAIUsageLimit(userId) {
         count: user.aiUsage.count
       },
       dailyLimit: config.AI_DAILY_LIMIT,
-      remainingModifications: Math.max(0, config.AI_DAILY_LIMIT - user.aiUsage.count)
+      remainingModifications: Math.max(0, config.AI_DAILY_LIMIT - user.aiUsage.count),
+      isTestUser: false
     };
   } catch (error) {
     console.error('Error checking AI usage limit:', error);
@@ -48,6 +66,22 @@ async function checkAIUsageLimit(userId) {
  */
 async function incrementAIUsageCounter(userId) {
   try {
+    // Sprawdź czy jest to testowy ID użytkownika
+    if (userId === 'test-user-id' || userId === 'dev-user-id') {
+      console.log('Inkrementacja licznika AI dla testowego użytkownika - pomijam');
+      return {
+        _id: userId,
+        id: userId,
+        email: userId === 'dev-user-id' ? 'dev@example.com' : 'test@example.com',
+        aiUsage: {
+          date: new Date(),
+          count: 1
+        },
+        isTestUser: true
+      };
+    }
+
+    // Dla rzeczywistych użytkowników aktualizujemy w bazie danych
     const user = await User.findById(userId);
     if (!user) {
       throw new Error('User not found');

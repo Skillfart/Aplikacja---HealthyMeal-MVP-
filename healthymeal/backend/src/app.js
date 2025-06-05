@@ -1,79 +1,118 @@
-// Dodaj obsługę błędów modułu OpenAI już na wczesnym etapie
+// Główny plik aplikacji backend
 try {
   require('openai');
+  console.log('Moduł OpenAI załadowany pomyślnie. Używamy prawdziwego API OpenRouter.');
 } catch (error) {
-  console.warn('Moduł OpenAI nie został znaleziony. Usługi AI będą działać w trybie symulacji.');
-  console.warn('Wykonaj instalację pakietu z katalogu backend: npm install openai');
+  console.warn('Moduł OpenAI nie został zainstalowany. Serwis AI będzie działać w trybie symulacji.');
 }
 
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
 const morgan = require('morgan');
-const path = require('path');
-require('dotenv').config();
+const config = require('./config/env');
+const logger = require('./utils/logger');
 
-// Import routes (będziemy je tworzyć później)
-const authRoutes = require('./routes/auth');
+// Import routes
 const userRoutes = require('./routes/user');
 const recipeRoutes = require('./routes/recipe');
-const ingredientRoutes = require('./routes/ingredient');
-const preferenceRoutes = require('./routes/preference');
 const aiRoutes = require('./routes/ai');
-const feedbackRoutes = require('./routes/feedback');
 
-// Inicjalizacja aplikacji
+// Create Express app
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Security middleware
+app.use(helmet());
 
-// Obsługa błędów CORS dla pre-flight
-app.options('*', cors());
+// CORS configuration
+app.use(cors({
+  origin: config.corsOrigin,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 
-// Połączenie z bazą danych
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/healthymeal')
-  .then(() => console.log('Połączono z bazą danych MongoDB'))
-  .catch(err => console.error('Błąd połączenia z bazą danych:', err));
+// Request parsing
+app.use(express.json({ limit: config.maxRequestSize }));
+app.use(express.urlencoded({ extended: true, limit: config.maxRequestSize }));
 
-// Obsługa błędów MongoDB
-mongoose.connection.on('error', err => {
-  console.error('Błąd MongoDB:', err);
+// Compression
+app.use(compression());
+
+// Logging
+if (config.nodeEnv !== 'test') {
+  app.use(morgan('combined', {
+    stream: {
+      write: (message) => logger.info(message.trim())
+    }
+  }));
+}
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Routy
-app.use('/api/auth', authRoutes);
+// API routes
 app.use('/api/users', userRoutes);
 app.use('/api/recipes', recipeRoutes);
-app.use('/api/ingredients', ingredientRoutes);
-app.use('/api/preferences', preferenceRoutes);
 app.use('/api/ai', aiRoutes);
-app.use('/api/feedback', feedbackRoutes);
 
-// Statyczna obsługa plików frontendu w trybie produkcyjnym
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/build')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+// Error handling
+app.use((err, req, res, next) => {
+  logger.error('Unhandled error:', err);
+
+  // Handle validation errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      error: 'Validation Error',
+      details: Object.values(err.errors).map(e => e.message)
+    });
+  }
+
+  // Handle MongoDB errors
+  if (err.name === 'MongoError' || err.name === 'MongoServerError') {
+    if (err.code === 11000) {
+      return res.status(409).json({
+        error: 'Duplicate Error',
+        message: 'A resource with that identifier already exists'
+      });
+    }
+  }
+
+  // Default error response
+  res.status(err.status || 500).json({
+    error: config.nodeEnv === 'production' ? 'Internal Server Error' : err.message
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Not Found',
+    message: `Cannot ${req.method} ${req.url}`
+  });
+});
+
+// Uruchomienie serwera
+if (require.main === module) {
+  const PORT = config.port || 3001;
+  app.listen(PORT, () => {
+    logger.info(`Serwer uruchomiony na porcie ${PORT}`);
+    logger.info(`URL API: http://localhost:${PORT}`);
+    logger.info(`Środowisko: ${config.nodeEnv}`);
   });
 }
 
-// Globalny middleware obsługi błędów
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    message: 'Wystąpił błąd serwera',
-    error: process.env.NODE_ENV === 'production' ? 'Szczegóły dostępne w logach serwera' : err.message
-  });
+module.exports = app;
+
+// Obsługa nieobsłużonych błędów
+process.on('uncaughtException', (error) => {
+  logger.error('Nieobsłużony błąd:', error);
+  process.exit(1);
 });
 
-// Obsługa nieistniejących tras
-app.use((req, res) => {
-  res.status(404).json({ message: 'Nie znaleziono zasobu' });
-});
-
-// Eksport aplikacji
-module.exports = app; 
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Nieobsłużone odrzucenie promise:', reason);
+}); 

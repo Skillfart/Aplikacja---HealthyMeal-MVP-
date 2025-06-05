@@ -3,8 +3,6 @@ const { expect } = require('chai');
 const { v4: uuidv4 } = require('uuid');
 
 describe('HealthyMeal Testy Autentykacji E2E', function() {
-  this.timeout(10000);
-  
   const API_URL = 'http://localhost:3030/api';
   const testEmail = `test-${uuidv4()}@example.com`;
   

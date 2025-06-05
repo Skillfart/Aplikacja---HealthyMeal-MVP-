@@ -3,25 +3,29 @@
   "version": "1.0.0",
   "description": "Testy dla aplikacji HealthyMeal",
   "scripts": {
-    "test:unit": "mocha unit/**/*.test.js",
-    "test:integration": "mocha integration/**/*.test.js",
-    "test:performance": "mocha performance/**/*.test.js",
-    "test:e2e": "mocha e2e/**/*.test.js",
-    "test": "mocha unit/**/*.test.js integration/**/*.test.js performance/**/*.test.js e2e/**/*.test.js",
-    "test:all": "node run-all-tests.js",
-    "test:ci": "mocha --reporter=min unit/**/*.test.js",
-    "cypress:open": "cypress open",
-    "cypress:run": "cypress run",
-    "postinstall": "echo 'Testy zostały zainstalowane. Użyj npm test:all by uruchomić wszystkie testy.'"
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "axios": "^1.9.0",
-    "chai": "^4.3.7",
-    "dotenv": "^16.5.0",
-    "mocha": "^10.2.0",
-    "mongoose": "^7.6.3",
-    "openai": "^4.96.0",
-    "sinon": "^15.0.3",
-    "supertest": "^6.3.3"
+    "@supabase/supabase-js": "^2.39.7",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/user-event": "^14.5.2",
+    "axios": "^1.6.7",
+    "bcrypt": "^5.1.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "react-router-dom": "^6.22.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@testing-library/react": "^14.1.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "@vitest/coverage-v8": "^0.34.6",
+    "@vitest/ui": "^0.34.6",
+    "jsdom": "^24.0.0",
+    "vitest": "^1.3.1"
   }
 }

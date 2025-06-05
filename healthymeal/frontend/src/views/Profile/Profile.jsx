@@ -1,77 +1,74 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { useAuth } from '../../contexts/AuthContext';
+import supabase from '../../config/supabaseClient';
 import styles from './Profile.module.css';
 
 export const Profile = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [aiUsage, setAiUsage] = useState(null);
 
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const token = localStorage.getItem('token');
+        // Pobierz dane użytkownika z Supabase
+        const { data: { user: userData }, error: userError } = await supabase.auth.getUser();
         
-        // Pobieranie danych użytkownika
-        const userResponse = await axios.get('/api/users/profile', {
-          headers: {
-            Authorization: `Bearer ${token}`
+        if (userError) throw userError;
+
+        // Pobierz dodatkowe dane profilu
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', userData.id)
+          .single();
+
+        if (profileError && profileError.code !== 'PGRST116') { // Ignoruj błąd "nie znaleziono"
+          throw profileError;
+        }
+
+        setUserData({
+          ...userData,
+          preferences: profileData || {
+            dietType: 'normal',
+            maxCarbs: 0,
+            excludedProducts: [],
+            allergens: []
           }
         });
-        
-        // Pobieranie informacji o limitach AI
-        const aiResponse = await axios.get('/api/ai/usage', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        
-        setUserData(userResponse.data);
-        setAiUsage(aiResponse.data);
         setLoading(false);
       } catch (err) {
-        console.error('Error fetching user data:', err);
-        setError('Nie udało się pobrać danych użytkownika. Spróbuj ponownie później.');
+        console.error('Błąd pobierania danych:', err);
+        setError('Nie udało się pobrać danych profilu');
         setLoading(false);
       }
     };
 
-    fetchUserData();
-  }, []);
+    if (user) {
+      fetchUserData();
+    }
+  }, [user]);
 
   const handleEditPreferences = () => {
     navigate('/profile/preferences');
   };
 
-  const handleGoToDashboard = () => {
-    navigate('/dashboard');
-  };
-
   const formatDate = (dateString) => {
-    if (!dateString) return 'Brak danych';
-    
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Nieprawidłowa data';
-      
-      return new Intl.DateTimeFormat('pl-PL', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }).format(date);
-    } catch (error) {
-      console.error('Błąd formatowania daty:', error);
-      return 'Nieprawidłowa data';
-    }
+    if (!dateString) return 'Nie określono';
+    return new Date(dateString).toLocaleDateString('pl-PL', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   if (loading) {
-    return <div className={styles.loading}>Ładowanie danych użytkownika...</div>;
+    return <div className={styles.loading}>Ładowanie...</div>;
   }
 
   if (error) {
@@ -79,22 +76,12 @@ export const Profile = () => {
   }
 
   if (!userData) {
-    return <div className={styles.notFound}>Dane użytkownika nie zostały znalezione.</div>;
+    return <div className={styles.error}>Nie znaleziono danych profilu</div>;
   }
 
   return (
     <div className={styles.profileContainer}>
-      <div className={styles.navBar}>
-        <button 
-          onClick={handleGoToDashboard} 
-          className={styles.backButton}
-        >
-          ← Powrót do dashboardu
-        </button>
-      </div>
-
       <h2>Profil użytkownika</h2>
-      
       <div className={styles.section}>
         <h3>Dane podstawowe</h3>
         <div className={styles.infoItem}>
@@ -103,14 +90,14 @@ export const Profile = () => {
         </div>
         <div className={styles.infoItem}>
           <span className={styles.label}>Data rejestracji:</span>
-          <span className={styles.value}>{formatDate(userData.createdAt)}</span>
+          <span className={styles.value}>{formatDate(userData.created_at)}</span>
         </div>
         <div className={styles.infoItem}>
-          <span className={styles.label}>Ostatnie logowanie:</span>
-          <span className={styles.value}>{formatDate(userData.lastLogin)}</span>
+          <span className={styles.label}>Ostatnia aktualizacja:</span>
+          <span className={styles.value}>{formatDate(userData.updated_at)}</span>
         </div>
       </div>
-      
+
       <div className={styles.section}>
         <h3>Preferencje dietetyczne</h3>
         <div className={styles.infoItem}>
@@ -139,44 +126,11 @@ export const Profile = () => {
               : 'Brak'}
           </span>
         </div>
-        
         <button 
-          className={styles.editButton} 
           onClick={handleEditPreferences}
+          className={styles.editButton}
         >
           Edytuj preferencje
-        </button>
-      </div>
-      
-      {aiUsage && (
-        <div className={styles.section}>
-          <h3>Wykorzystanie AI</h3>
-          <div className={styles.infoItem}>
-            <span className={styles.label}>Liczba modyfikacji dzisiaj:</span>
-            <span className={styles.value}>
-              {aiUsage?.aiUsage?.count || 0} / {aiUsage?.dailyLimit || 5}
-            </span>
-          </div>
-          <div className={styles.usageBar}>
-            <div 
-              className={styles.usageProgress} 
-              style={{ 
-                width: `${((aiUsage?.aiUsage?.count || 0) / (aiUsage?.dailyLimit || 5)) * 100}%` 
-              }}
-            />
-          </div>
-          <div className={styles.resetInfo}>
-            Limit zostanie zresetowany o północy.
-          </div>
-        </div>
-      )}
-
-      <div className={styles.actionButtons}>
-        <button 
-          className={styles.dashboardButton} 
-          onClick={handleGoToDashboard}
-        >
-          Przejdź do dashboardu
         </button>
       </div>
     </div>
