@@ -1,11 +1,23 @@
-import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
-import mongoose from 'mongoose';
-import { authMiddleware } from './middleware/auth.js';
-import userRoutes from './routes/users.js';
-import recipeRoutes from './routes/recipes.js';
-import aiRoutes from './routes/ai.js';
+import dotenv from 'dotenv';
+
+// Wczytaj zmienne środowiskowe z pliku .env lub .env.development
+let envPath = process.env.DOTENV_CONFIG_PATH;
+if (!envPath) {
+  if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+    envPath = '.env.development';
+  } else {
+    envPath = '.env';
+  }
+}
+dotenv.config({ path: envPath });
+console.log(`Wczytano konfigurację z ${envPath}`);
+const express = (await import('express')).default;
+const cors = (await import('cors')).default;
+const mongoose = (await import('mongoose')).default;
+const { authMiddleware } = await import('./middleware/auth.js');
+const userRoutes = (await import('./routes/users.js')).default;
+const recipeRoutes = (await import('./routes/recipes.js')).default;
+const aiRoutes = (await import('./routes/ai.js')).default;
 
 const app = express();
 const port = process.env.PORT || 3031;
