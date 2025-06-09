@@ -20,15 +20,21 @@ const supabase = createClient(
 export const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader) {
       return res.status(401).json({ error: 'Brak tokenu autoryzacji' });
     }
 
-    const token = authHeader.split(' ')[1];
-    
-    if (!token) {
+    const parts = authHeader.split(' ');
+
+    if (parts.length !== 2 || parts[0] !== 'Bearer') {
       return res.status(401).json({ error: 'Nieprawidłowy format tokenu' });
+    }
+
+    const token = parts[1];
+
+    if (token.split('.').length !== 3) {
+      return res.status(401).json({ error: 'Nieprawidłowy token' });
     }
 
     const { data: { user }, error } = await supabase.auth.getUser(token);
