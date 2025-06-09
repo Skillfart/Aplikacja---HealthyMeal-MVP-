@@ -47,6 +47,7 @@ const Dashboard = () => {
     if (!profile) return;
     setSaving(true);
     try {
+
       await axios.put(`${import.meta.env.VITE_API_URL}/api/users/profile`, {
         name: profile.name
       }, {
@@ -54,6 +55,14 @@ const Dashboard = () => {
       });
       await axios.put(`${import.meta.env.VITE_API_URL}/api/users/preferences`, profile.preferences, {
         headers: { Authorization: `Bearer ${session?.access_token}` }
+
+      await axios.put('http://localhost:3031/api/users/profile', {
+        name: profile.name
+      }, {
+        headers: { Authorization: `Bearer ${user?.access_token}` }
+      });
+      await axios.put('http://localhost:3031/api/users/preferences', profile.preferences, {
+        headers: { Authorization: `Bearer ${user?.access_token}` }
       });
     } catch (err) {
       console.error('Błąd zapisu profilu:', err);
