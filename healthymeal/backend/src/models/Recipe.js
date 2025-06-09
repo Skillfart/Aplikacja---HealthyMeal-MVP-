@@ -1,223 +1,121 @@
-const mongoose = require('mongoose');
-const { Schema } = mongoose;
+import mongoose from 'mongoose';
 
-// Sprawdź czy jesteśmy w środowisku deweloperskim/testowym
-const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
-
-const ingredientSchema = new Schema({
-  name: {
+const recipeSchema = new mongoose.Schema({
+  title: {
     type: String,
-    required: true,
-    trim: true,
-    minlength: 2,
-    maxlength: 100
-  },
-  amount: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  unit: {
-    type: String,
-    required: true,
-    enum: ['g', 'ml', 'szt', 'łyżka', 'łyżeczka', 'szklanka', 'do smaku']
-  },
-  category: {
-    type: String,
-    enum: ['warzywa', 'owoce', 'mięso', 'nabiał', 'zboża', 'przyprawy', 'inne'],
     required: true
   },
-  notes: {
-    type: String,
-    maxlength: 200
-  }
-});
-
-const nutritionSchema = new Schema({
-  calories: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  protein: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  carbs: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  fat: {
-    type: Number,
-    required: true,
-    min: 0
-  },
-  fiber: {
-    type: Number,
-    required: true,
-    min: 0
-  }
-});
-
-const recipeSchema = new Schema({
-  userId: {
-    type: Schema.Types.ObjectId,
+  author: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  title: {
-    type: String,
-    required: true,
-    trim: true,
-    minlength: 3,
-    maxlength: 200
-  },
-  description: {
-    type: String,
-    required: true,
-    minlength: 10,
-    maxlength: 2000
-  },
   ingredients: [{
     ingredient: {
-      type: Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId,
       ref: 'Ingredient',
       required: true
     },
-    amount: {
+    quantity: {
       type: Number,
-      required: true,
-      min: 0
+      required: true
     },
     unit: {
       type: String,
-      required: true,
-      maxlength: 20
+      required: true
     },
-    notes: {
-      type: String,
-      maxlength: 200
+    isOptional: {
+      type: Boolean,
+      default: false
     }
   }],
-  instructions: [{
-    type: String,
-    required: true,
-    minlength: 10,
-    maxlength: 1000
+  steps: [{
+    number: {
+      type: Number,
+      required: true
+    },
+    description: {
+      type: String,
+      required: true
+    },
+    estimatedTime: {
+      type: Number, // w minutach
+      required: true
+    }
   }],
   preparationTime: {
-    type: Number,
-    required: true,
-    min: 1
+    type: Number, // całkowity czas w minutach
+    required: true
+  },
+  difficulty: {
+    type: String,
+    enum: ['easy', 'medium', 'hard'],
+    required: true
   },
   servings: {
     type: Number,
     required: true,
     min: 1
   },
-  difficulty: {
-    type: String,
-    required: true,
-    enum: ['easy', 'medium', 'hard']
-  },
-  nutritionalValues: {
-    calories: {
-      type: Number,
-      min: 0
-    },
-    protein: {
-      type: Number,
-      min: 0
-    },
-    carbs: {
-      type: Number,
-      min: 0
-    },
-    fat: {
-      type: Number,
-      min: 0
-    },
-    fiber: {
-      type: Number,
-      min: 0
-    },
-    carbsPerServing: {
-      type: Number,
-      min: 0
-    }
-  },
   tags: [{
-    type: String,
-    maxlength: 30
+    type: String
   }],
-  isDeleted: {
+  nutritionalValues: {
+    totalCalories: Number,
+    totalCarbs: Number,
+    totalProtein: Number,
+    totalFat: Number,
+    totalFiber: Number,
+    caloriesPerServing: Number,
+    carbsPerServing: Number
+  },
+  isModified: {
     type: Boolean,
     default: false
   },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  originalRecipe: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Recipe',
+    default: null
   }
 }, {
-  timestamps: true,
-  // Opcja pozwalająca na elastyczne pola (szczególnie przydatne dla danych z AI)
-  strict: isDev ? false : true
+  timestamps: true
 });
 
-// Indeksy
-recipeSchema.index({ userId: 1, createdAt: -1 });
-recipeSchema.index({ title: 'text', description: 'text' });
-recipeSchema.index({ tags: 1 });
-recipeSchema.index({ isDeleted: 1 });
-recipeSchema.index({ 'nutritionalValues.carbsPerServing': 1 });
-recipeSchema.index({ difficulty: 1 });
+// Middleware do automatycznego obliczania wartości odżywczych
+recipeSchema.pre('save', async function(next) {
+  if (this.isModified('ingredients')) {
+    let totalCalories = 0;
+    let totalCarbs = 0;
+    let totalProtein = 0;
+    let totalFat = 0;
+    let totalFiber = 0;
 
-// Middleware do obliczania wartości odżywczych na porcję
-recipeSchema.pre('save', function(next) {
-  if (this.isModified('nutritionalValues') || this.isModified('servings')) {
-    this.nutritionalValues.carbsPerServing = this.nutritionalValues.carbs / this.servings;
+    // Pobierz wszystkie składniki
+    const populatedRecipe = await this.populate('ingredients.ingredient');
+    
+    for (const item of populatedRecipe.ingredients) {
+      const { nutritionalValues } = item.ingredient;
+      const ratio = item.quantity / 100; // przelicznik na 100g/ml
+
+      totalCalories += nutritionalValues.calories * ratio;
+      totalCarbs += nutritionalValues.carbs * ratio;
+      totalProtein += nutritionalValues.protein * ratio;
+      totalFat += nutritionalValues.fat * ratio;
+      totalFiber += (nutritionalValues.fiber || 0) * ratio;
+    }
+
+    this.nutritionalValues = {
+      totalCalories: Math.round(totalCalories),
+      totalCarbs: Math.round(totalCarbs),
+      totalProtein: Math.round(totalProtein),
+      totalFat: Math.round(totalFat),
+      totalFiber: Math.round(totalFiber),
+      caloriesPerServing: Math.round(totalCalories / this.servings),
+      carbsPerServing: Math.round(totalCarbs / this.servings)
+    };
   }
   next();
 });
 
-// Metoda do obliczania wartości odżywczych
-recipeSchema.methods.calculateNutritionalValues = async function() {
-  const Ingredient = mongoose.model('Ingredient');
-  const totalValues = {
-    calories: 0,
-    protein: 0,
-    carbs: 0,
-    fat: 0,
-    fiber: 0
-  };
-
-  for (const item of this.ingredients) {
-    const ingredient = await Ingredient.findById(item.ingredient);
-    if (ingredient) {
-      const factor = item.amount / 100; // wartości są na 100g
-      totalValues.calories += ingredient.nutritionalValues.calories * factor;
-      totalValues.protein += ingredient.nutritionalValues.protein * factor;
-      totalValues.carbs += ingredient.nutritionalValues.carbs * factor;
-      totalValues.fat += ingredient.nutritionalValues.fat * factor;
-      totalValues.fiber += ingredient.nutritionalValues.fiber * factor;
-    }
-  }
-
-  this.nutritionalValues = {
-    ...totalValues,
-    carbsPerServing: totalValues.carbs / this.servings
-  };
-
-  await this.save();
-  return this.nutritionalValues;
-};
-
-const Recipe = mongoose.model('Recipe', recipeSchema);
-
-module.exports = Recipe; 
+export const Recipe = mongoose.model('Recipe', recipeSchema); 

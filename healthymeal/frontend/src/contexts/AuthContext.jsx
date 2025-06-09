@@ -1,23 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import supabaseClient from '../config/supabaseClient';
+import { supabase } from '../supabase';
 
-/**
- * @typedef {Object} AuthContextType
- * @property {Object|null} session - Sesja użytkownika z Supabase
- * @property {Object|null} user - Dane użytkownika
- * @property {boolean} loading - Stan ładowania
- * @property {Function} signUp - Funkcja rejestracji
- * @property {Function} signIn - Funkcja logowania
- * @property {Function} signOut - Funkcja wylogowania
- */
+const AuthContext = createContext({});
 
-/** @type {React.Context<AuthContextType>} */
-const AuthContext = createContext();
-
-/**
- * Hook dostarczający kontekst autoryzacji
- * @returns {AuthContextType} Kontekst autoryzacji
- */
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -26,12 +11,6 @@ export const useAuth = () => {
   return context;
 };
 
-/**
- * Provider kontekstu autoryzacji
- * @param {Object} props - Właściwości komponentu
- * @param {React.ReactNode} props.children - Komponenty potomne
- * @returns {JSX.Element} Provider kontekstu autoryzacji
- */
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
@@ -39,94 +18,83 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Pobierz aktualną sesję
-    const initializeAuth = async () => {
+    let mounted = true;
+
+    // Pobierz początkową sesję
+    const getInitialSession = async () => {
       try {
-        const { data: { session }, error } = await supabaseClient.auth.getSession();
-        if (error) throw error;
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        setSession(session);
-        setUser(session?.user ?? null);
+        if (mounted) {
+          if (error) throw error;
+          setSession(session);
+          setUser(session?.user ?? null);
+        }
       } catch (error) {
-        console.error('Błąd podczas inicjalizacji autoryzacji:', error);
-        setError(error.message);
+        if (mounted) {
+          console.error('Błąd podczas pobierania sesji:', error);
+          setError(error.message);
+        }
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
-    initializeAuth();
+    getInitialSession();
 
-    // Nasłuchuj zmian sesji
-    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+    // Nasłuchuj na zmiany w autoryzacji
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (mounted) {
+        console.log('Zmiana stanu autoryzacji:', event);
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription?.unsubscribe();
+    };
   }, []);
-
-  /**
-   * Rejestracja nowego użytkownika
-   * @param {string} email - Adres email
-   * @param {string} password - Hasło
-   * @returns {Promise<Object>} Wynik rejestracji
-   */
-  const signUp = async (email, password) => {
-    try {
-      setError(null);
-      const { data, error } = await supabaseClient.auth.signUp({ email, password });
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      setError(error.message);
-      throw error;
-    }
-  };
-
-  /**
-   * Logowanie użytkownika
-   * @param {string} email - Adres email
-   * @param {string} password - Hasło
-   * @returns {Promise<Object>} Wynik logowania
-   */
-  const signIn = async (email, password) => {
-    try {
-      setError(null);
-      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      setError(error.message);
-      throw error;
-    }
-  };
-
-  /**
-   * Wylogowanie użytkownika
-   * @returns {Promise<Object>} Wynik wylogowania
-   */
-  const signOut = async () => {
-    try {
-      setError(null);
-      const { error } = await supabaseClient.auth.signOut();
-      if (error) throw error;
-    } catch (error) {
-      setError(error.message);
-      throw error;
-    }
-  };
 
   const value = {
     session,
     user,
     loading,
     error,
-    signUp,
-    signIn,
-    signOut,
-    isAuthenticated: !!session?.access_token
+    signIn: async (email) => {
+      try {
+        setError(null);
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: `${window.location.origin}/dashboard`,
+            shouldCreateUser: true
+          }
+        });
+        if (error) throw error;
+        return { error: null };
+      } catch (error) {
+        console.error('Błąd logowania:', error);
+        setError(error.message);
+        return { error };
+      }
+    },
+    signOut: async () => {
+      try {
+        setError(null);
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        return { error: null };
+      } catch (error) {
+        console.error('Błąd wylogowania:', error);
+        setError(error.message);
+        return { error };
+      }
+    }
   };
 
   return (
@@ -134,6 +102,4 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-};
-
-export default AuthContext; 
+}; 

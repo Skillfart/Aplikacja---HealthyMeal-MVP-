@@ -1,33 +1,87 @@
-const express = require('express');
+import express from 'express';
+import { Recipe } from '../models/Recipe.js';
+import { User } from '../models/User.js';
+import { modifyRecipe } from '../services/ai.js';
+
 const router = express.Router();
-const { authMiddleware, checkAILimit } = require('../middleware/auth');
 
-// Endpoint do modyfikacji przepisu przez AI
-router.post('/modify/:recipeId', [authMiddleware, checkAILimit], async (req, res) => {
+// Modyfikuj przepis używając AI
+router.post('/modify-recipe/:id', async (req, res) => {
   try {
-    // TODO: Implementacja modyfikacji przepisu przez AI
-    res.status(501).json({ 
-      message: 'Funkcjonalność w trakcie implementacji',
-      recipeId: req.params.recipeId
+    // Znajdź przepis
+    const recipe = await Recipe.findOne({
+      _id: req.params.id,
+      author: req.user.id
+    }).populate('ingredients.ingredient');
+
+    if (!recipe) {
+      return res.status(404).json({ error: 'Przepis nie znaleziony' });
+    }
+
+    // Znajdź użytkownika i sprawdź limit AI
+    const user = await User.findOne({ supabaseId: req.user.id });
+    if (!user) {
+      return res.status(404).json({ error: 'Użytkownik nie znaleziony' });
+    }
+
+    try {
+      user.incrementAiUsage();
+    } catch (error) {
+      return res.status(429).json({ error: error.message });
+    }
+
+    // Modyfikuj przepis
+    const modifiedRecipeData = await modifyRecipe(recipe, user.preferences);
+
+    // Stwórz nowy przepis na podstawie modyfikacji
+    const modifiedRecipe = new Recipe({
+      title: `${recipe.title} (Zmodyfikowany)`,
+      author: req.user.id,
+      ingredients: modifiedRecipeData.ingredients,
+      steps: modifiedRecipeData.steps,
+      preparationTime: recipe.preparationTime,
+      difficulty: recipe.difficulty,
+      servings: recipe.servings,
+      tags: [...recipe.tags, 'zmodyfikowany'],
+      nutritionalValues: modifiedRecipeData.nutritionalValues,
+      isModified: true,
+      originalRecipe: recipe._id
     });
-  } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
-// Endpoint do sprawdzenia limitu użycia AI
-router.get('/usage', authMiddleware, async (req, res) => {
-  try {
-    const user = req.user;
+    await Promise.all([
+      modifiedRecipe.save(),
+      user.save()
+    ]);
+
+    const populatedRecipe = await Recipe.findById(modifiedRecipe._id)
+      .populate('ingredients.ingredient');
+
     res.json({
-      aiUsage: user.aiUsage,
-      hasRemainingModifications: user.hasRemainingAIModifications(),
-      dailyLimit: 5,
-      remainingModifications: 5 - (user.aiUsage?.count || 0)
+      recipe: populatedRecipe,
+      aiUsage: user.aiUsage
     });
   } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Błąd podczas modyfikacji przepisu:', error);
+    res.status(500).json({ error: 'Błąd serwera podczas modyfikacji przepisu' });
   }
 });
 
-module.exports = router; 
+// Pobierz statystyki użycia AI
+router.get('/usage', async (req, res) => {
+  try {
+    const user = await User.findOne({ supabaseId: req.user.id });
+    if (!user) {
+      return res.status(404).json({ error: 'Użytkownik nie znaleziony' });
+    }
+
+    user.resetAiUsageIfNewDay();
+    await user.save();
+
+    res.json(user.aiUsage);
+  } catch (error) {
+    console.error('Błąd podczas pobierania statystyk AI:', error);
+    res.status(500).json({ error: 'Błąd serwera podczas pobierania statystyk AI' });
+  }
+});
+
+export default router; 
