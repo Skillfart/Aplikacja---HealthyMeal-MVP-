@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
 
 const Dashboard = () => {
-  const { user, signOut } = useAuth();
+  const { user, session, signOut } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,9 +14,9 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const response = await axios.get('http://localhost:3031/api/users/profile', {
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/users/profile`, {
           headers: {
-            Authorization: `Bearer ${user?.access_token}`
+            Authorization: `Bearer ${session?.access_token}`
           }
         });
         setProfile(response.data);
@@ -47,6 +47,15 @@ const Dashboard = () => {
     if (!profile) return;
     setSaving(true);
     try {
+
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/users/profile`, {
+        name: profile.name
+      }, {
+        headers: { Authorization: `Bearer ${session?.access_token}` }
+      });
+      await axios.put(`${import.meta.env.VITE_API_URL}/api/users/preferences`, profile.preferences, {
+        headers: { Authorization: `Bearer ${session?.access_token}` }
+
       await axios.put('http://localhost:3031/api/users/profile', {
         name: profile.name
       }, {
