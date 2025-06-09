@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "cross-env NODE_ENV=development nodemon src/server.js"
+    "dev": "cross-env NODE_ENV=development DOTENV_CONFIG_PATH=.env.development nodemon src/server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",

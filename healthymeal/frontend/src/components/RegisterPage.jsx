@@ -2,26 +2,30 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-const LoginPage = () => {
+const RegisterPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const { signIn } = useAuth();
+  const { signUp } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      setMessage('Hasła nie są identyczne');
+      return;
+    }
     setLoading(true);
     setMessage('');
-
     try {
-      const { error } = await signIn(email, password);
+      const { error } = await signUp(email, password);
       if (error) throw error;
-      setMessage('Sprawdź swoją skrzynkę email, aby się zalogować!');
+      navigate('/dashboard');
     } catch (error) {
-      console.error('Błąd logowania:', error);
-      setMessage(error.message || 'Wystąpił błąd podczas logowania');
+      console.error('Błąd rejestracji:', error);
+      setMessage(error.message || 'Wystąpił błąd podczas rejestracji');
     } finally {
       setLoading(false);
     }
@@ -31,8 +35,7 @@ const LoginPage = () => {
     <div className="login-container">
       <div className="login-box">
         <h1>HealthyMeal</h1>
-        <p>Zaloguj się, aby kontynuować</p>
-        
+        <p>Utwórz nowe konto</p>
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
             <label htmlFor="email">Email</label>
@@ -56,22 +59,27 @@ const LoginPage = () => {
               required
             />
           </div>
-
-          <button 
-            type="submit" 
-            className="login-button"
-            disabled={loading}
-          >
-            {loading ? 'Wysyłanie...' : 'Zaloguj się'}
+          <div className="form-group">
+            <label htmlFor="confirmPassword">Potwierdź hasło</label>
+            <input
+              type="password"
+              id="confirmPassword"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Powtórz hasło"
+              required
+            />
+          </div>
+          <button type="submit" className="login-button" disabled={loading}>
+            {loading ? 'Rejestracja...' : 'Zarejestruj się'}
           </button>
-
           {message && (
             <div className={`message ${message.includes('błąd') ? 'error' : 'success'}`}>
               {message}
             </div>
           )}
           <p style={{ marginTop: '10px', textAlign: 'center' }}>
-            Nie masz konta? <a href="/register">Zarejestruj się</a>
+            Masz już konto? <a href="/login">Zaloguj się</a>
           </p>
         </form>
       </div>
@@ -79,4 +87,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default RegisterPage;
