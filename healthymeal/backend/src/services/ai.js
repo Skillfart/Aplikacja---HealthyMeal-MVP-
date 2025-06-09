@@ -3,8 +3,8 @@ import axios from 'axios';
 const openRouterClient = axios.create({
   baseURL: 'https://openrouter.ai/api/v1',
   headers: {
-    'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-    'HTTP-Referer': process.env.OPENROUTER_REFERRER,
+    Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+    'HTTP-Referer': process.env.OPENROUTER_REFERER,
     'Content-Type': 'application/json'
   }
 });
@@ -52,11 +52,19 @@ Proszę o modyfikację przepisu z zachowaniem podobnego smaku i tekstury, ale zg
 };
 
 const parseAIResponse = (response) => {
-  // TODO: Zaimplementować parser odpowiedzi AI
-  // Powinien zwrócić obiekt z zmodyfikowanymi składnikami i krokami
-  return {
-    ingredients: [],
-    steps: [],
-    nutritionalValues: {}
-  };
-}; 
+  try {
+    const data = JSON.parse(response);
+    return {
+      ingredients: data.ingredients || [],
+      steps: data.steps || [],
+      nutritionalValues: data.nutritionalValues || {}
+    };
+  } catch (e) {
+    console.error('Nie udało się sparsować odpowiedzi AI:', e);
+    return {
+      ingredients: [],
+      steps: [],
+      nutritionalValues: {}
+    };
+  }
+};
