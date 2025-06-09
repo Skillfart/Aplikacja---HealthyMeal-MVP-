@@ -13,6 +13,7 @@ router.get('/profile', async (req, res) => {
       user = await User.create({
         supabaseId: req.user.id,
         email: req.user.email,
+        name: req.user.user_metadata?.name || '',
         preferences: {
           dietType: 'normal',
           maxCarbs: 0,
@@ -51,6 +52,28 @@ router.put('/preferences', async (req, res) => {
   } catch (error) {
     console.error('Błąd podczas aktualizacji preferencji:', error);
     res.status(500).json({ error: 'Błąd serwera podczas aktualizacji preferencji' });
+  }
+});
+
+// Aktualizuj dane profilu (np. imię)
+router.put('/profile', async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    const user = await User.findOne({ supabaseId: req.user.id });
+    if (!user) {
+      return res.status(404).json({ error: 'Użytkownik nie znaleziony' });
+    }
+
+    if (typeof name === 'string') {
+      user.name = name;
+    }
+
+    await user.save();
+    res.json({ message: 'Profil zaktualizowany', user });
+  } catch (error) {
+    console.error('Błąd podczas aktualizacji profilu:', error);
+    res.status(500).json({ error: 'Błąd serwera podczas aktualizacji profilu' });
   }
 });
 
