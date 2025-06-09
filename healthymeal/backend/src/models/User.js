@@ -11,6 +11,10 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+  name: {
+    type: String,
+    default: ''
+  },
   preferences: {
     dietType: {
       type: String,

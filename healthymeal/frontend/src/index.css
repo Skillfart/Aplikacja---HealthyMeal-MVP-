@@ -214,3 +214,43 @@ body {
   margin-bottom: 20px;
   text-align: center;
 } 
+/* Landing Page */
+.landing {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.landing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 60px;
+}
+
+.header-link {
+  margin-left: 15px;
+  text-decoration: none;
+  color: var(--text-color);
+}
+
+.header-link.primary {
+  padding: 8px 16px;
+  background-color: var(--primary-color);
+  color: #fff;
+  border-radius: 4px;
+}
+
+.hero h2 {
+  font-size: 2rem;
+  margin-bottom: 10px;
+}
+
+.cta-button {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 12px 24px;
+  background-color: var(--primary-color);
+  color: #fff;
+  border-radius: 4px;
+  text-decoration: none;
+}
