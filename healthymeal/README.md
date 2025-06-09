@@ -46,8 +46,10 @@ npm install
 ```bash
 # Frontend
 cd frontend
-cp src/config/env.example.js src/config/env.js
-# Uzupełnij wartości w env.js
+cp .env.development .env
+# Uzupełnij wartości w .env jeśli to konieczne
+
+# Backend korzysta domyślnie z pliku .env.development
 ```
 
 4. Uruchom aplikację:
@@ -57,7 +59,7 @@ npm start
 
 # Backend (jeśli potrzebny)
 cd ../backend
-npm start
+npm run dev  # korzysta z pliku .env.development
 ```
 
 ## 🔧 Konfiguracja
