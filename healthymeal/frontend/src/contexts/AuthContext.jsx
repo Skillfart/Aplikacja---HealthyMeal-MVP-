@@ -65,20 +65,36 @@ export const AuthProvider = ({ children }) => {
     user,
     loading,
     error,
-    signIn: async (email) => {
+    signIn: async (email, password) => {
       try {
         setError(null);
-        const { error } = await supabase.auth.signInWithOtp({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
-          options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
-            shouldCreateUser: true
-          }
+          password
         });
         if (error) throw error;
+        setSession(data.session);
+        setUser(data.user);
         return { error: null };
       } catch (error) {
         console.error('Błąd logowania:', error);
+        setError(error.message);
+        return { error };
+      }
+    },
+    signUp: async (email, password) => {
+      try {
+        setError(null);
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password
+        });
+        if (error) throw error;
+        setSession(data.session);
+        setUser(data.user);
+        return { error: null };
+      } catch (error) {
+        console.error('Błąd rejestracji:', error);
         setError(error.message);
         return { error };
       }
