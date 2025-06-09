@@ -49,8 +49,7 @@ cd frontend
 cp .env.development .env
 # Uzupełnij wartości w .env jeśli to konieczne
 
-# Backend wczytuje automatycznie zmienne z `.env.development`
-=======
+
 # Backend korzysta domyślnie z pliku .env.development
 
 
