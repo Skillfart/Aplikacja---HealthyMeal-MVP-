@@ -23,10 +23,25 @@ export const recipeValidationRules = [
 ];
 
 export const userPreferencesValidationRules = [
-  body('dietType').isIn(['normal', 'vegetarian', 'vegan', 'lowCarb', 'keto']).withMessage('Nieprawidłowy typ diety'),
-  body('maxCarbs').optional().isInt({ min: 0 }).withMessage('Maksymalna ilość węglowodanów musi być liczbą nieujemną'),
-  body('excludedProducts').optional().isArray().withMessage('Wykluczone produkty muszą być tablicą'),
-  body('allergens').optional().isArray().withMessage('Alergeny muszą być tablicą')
+  body('dietType')
+    .isIn(['normal', 'keto', 'lowCarb', 'paleo', 'vegetarian', 'vegan', 'glutenFree', 'dairyFree'])
+    .withMessage('Nieprawidłowy typ diety'),
+  body('maxCarbs')
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage('Maksymalna ilość węglowodanów musi być liczbą nieujemną'),
+  body('excludedProducts')
+    .optional()
+    .isArray()
+    .withMessage('Wykluczone produkty muszą być tablicą'),
+  body('allergens')
+    .optional()
+    .isArray()
+    .custom((value) => {
+      const validAllergens = ['gluten', 'dairy', 'nuts', 'eggs', 'soy', 'shellfish', 'fish', 'peanuts'];
+      return value.every(allergen => validAllergens.includes(allergen));
+    })
+    .withMessage('Nieprawidłowe alergeny')
 ];
 
 export const idValidationRule = [

@@ -1,3 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter var', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-colors duration-200;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 text-white hover:bg-primary-700;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-800 hover:bg-gray-300;
+  }
+  
+  .input {
+    @apply w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
+  }
+  
+  .card {
+    @apply bg-white rounded-lg shadow-md p-6;
+  }
+  
+  .form-group {
+    @apply space-y-2 mb-4;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-gray-700;
+  }
+  
+  .error-message {
+    @apply text-red-600 text-sm mt-1;
+  }
+  
+  .success-message {
+    @apply text-green-600 text-sm mt-1;
+  }
+
+  .login-container {
+    @apply min-h-screen flex items-center justify-center p-5;
+  }
+
+  .login-box {
+    @apply bg-white p-10 rounded-lg shadow-md w-full max-w-md;
+  }
+
+  .dashboard {
+    @apply min-h-screen bg-gray-50;
+  }
+
+  .dashboard-header {
+    @apply bg-white p-5 shadow-sm flex justify-between items-center;
+  }
+
+  .dashboard-content {
+    @apply max-w-7xl mx-auto p-5;
+  }
+
+  .loading-screen {
+    @apply fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center;
+  }
+
+  .loading-spinner {
+    @apply animate-spin h-10 w-10 text-white;
+  }
+}
+
 :root {
   --primary-color: #4CAF50;
   --primary-hover: #45a049;

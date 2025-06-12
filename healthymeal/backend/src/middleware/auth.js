@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import User from '../models/User.js';
 
 // Sprawdzenie zmiennych środowiskowych
 console.log('Konfiguracja Supabase:');
@@ -19,40 +20,103 @@ const supabase = createClient(
 
 export const authMiddleware = async (req, res, next) => {
   try {
+    // Sprawdź czy jest nagłówek autoryzacji
     const authHeader = req.headers.authorization;
-
-    if (!authHeader) {
+    console.log('Auth header:', authHeader ? '✅ Present' : '❌ Missing');
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Brak tokenu autoryzacji' });
     }
 
-    const parts = authHeader.split(' ');
+    // Sprawdź format tokenu
+    const token = authHeader.split(' ')[1];
+    const isValidJWT = token && token.split('.').length === 3;
+    console.log('Token format:', isValidJWT ? '✅ Valid JWT' : '❌ Invalid format');
 
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    if (!isValidJWT) {
       return res.status(401).json({ error: 'Nieprawidłowy format tokenu' });
     }
 
-    const token = parts[1];
-
-    if (token.split('.').length !== 3) {
-      return res.status(401).json({ error: 'Nieprawidłowy token' });
-    }
-
+    // Zweryfikuj token w Supabase
     const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    console.log('Auth result:', {
+      user: user ? '✅ User found' : '❌ No user',
+      error: error ? `❌ ${error.message}` : '✅ No error'
+    });
 
-    if (error) {
-      console.error('Błąd weryfikacji tokenu:', error);
+    if (error || !user) {
       return res.status(401).json({ error: 'Nieprawidłowy token' });
     }
 
-    if (!user) {
-      return res.status(401).json({ error: 'Użytkownik nie znaleziony' });
-    }
+    // Znajdź lub utwórz użytkownika w MongoDB
+    try {
+      let mongoUser = await User.findOne({ supabaseId: user.id });
+      
+      if (!mongoUser) {
+        console.log('Tworzenie/aktualizacja użytkownika:', {
+          supabaseId: user.id,
+          email: user.email
+        });
 
-    // Dodaj dane użytkownika do obiektu request
-    req.user = user;
-    next();
+        // Użyj findOneAndUpdate z upsert:true aby uniknąć race condition
+        mongoUser = await User.findOneAndUpdate(
+          { supabaseId: user.id },
+          {
+            $setOnInsert: {
+              email: user.email,
+              createdAt: new Date()
+            },
+            $set: {
+              updatedAt: new Date()
+            }
+          },
+          {
+            upsert: true,
+            new: true,
+            runValidators: true
+          }
+        );
+
+        console.log('✅ Użytkownik utworzony/zaktualizowany:', mongoUser._id);
+      } else {
+        console.log('✅ Znaleziono istniejącego użytkownika:', mongoUser._id);
+      }
+
+      // Dodaj użytkownika do obiektu request
+      req.user = user;
+      req.mongoUser = mongoUser;
+      next();
+    } catch (dbError) {
+      console.error('❌ Błąd bazy danych:', dbError);
+      
+      // Obsługa duplikatów
+      if (dbError.code === 11000) {
+        console.log('Znaleziono duplikat, próba ponownego pobrania...');
+        try {
+          const existingUser = await User.findOne({ supabaseId: user.id });
+          if (existingUser) {
+            req.user = user;
+            req.mongoUser = existingUser;
+            return next();
+          }
+        } catch (retryError) {
+          console.error('❌ Błąd podczas próby ponownego pobrania:', retryError);
+        }
+      }
+      
+      // Szczegółowe logowanie błędów walidacji
+      if (dbError.name === 'ValidationError') {
+        console.error('Szczegóły błędu walidacji:');
+        Object.keys(dbError.errors).forEach(key => {
+          console.error(`- ${key}:`, dbError.errors[key].message);
+        });
+      }
+      
+      return res.status(500).json({ error: 'Błąd serwera podczas autoryzacji' });
+    }
   } catch (error) {
-    console.error('Błąd autoryzacji:', error);
-    res.status(500).json({ error: 'Błąd serwera podczas autoryzacji' });
+    console.error('❌ Błąd autoryzacji:', error);
+    return res.status(500).json({ error: 'Błąd serwera podczas autoryzacji' });
   }
 };

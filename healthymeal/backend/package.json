@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "cross-env NODE_ENV=development DOTENV_CONFIG_PATH=.env.development nodemon src/server.js"
+    "dev": "nodemon -r dotenv/config src/server.js",
+    "start": "node -r dotenv/config src/server.js",
+    "kill-port": "npx kill-port 3031",
+    "restart": "npm run kill-port && npm run dev"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",

@@ -1,61 +1,98 @@
-import dotenv from 'dotenv';
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import userRoutes from './routes/users.js';
+import dashboardRoutes from './routes/dashboard.js';
+import recipesRoutes from './routes/recipes.js';
 
-// Wczytaj zmienne środowiskowe z pliku .env lub .env.development
-let envPath = process.env.DOTENV_CONFIG_PATH;
-if (!envPath) {
-  if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-    envPath = '.env.development';
-  } else {
-    envPath = '.env';
-  }
-}
-dotenv.config({ path: envPath });
-console.log(`Wczytano konfigurację z ${envPath}`);
-const express = (await import('express')).default;
-const cors = (await import('cors')).default;
-const mongoose = (await import('mongoose')).default;
-const { authMiddleware } = await import('./middleware/auth.js');
-const userRoutes = (await import('./routes/users.js')).default;
-const recipeRoutes = (await import('./routes/recipes.js')).default;
-const aiRoutes = (await import('./routes/ai.js')).default;
+// Konfiguracja Mongoose
+//mongoose.set('suppressReservedKeysWarning', true);
+
+// Sprawdzenie zmiennych środowiskowych
+console.log('Załadowano konfigurację z pliku:', process.env.NODE_ENV === 'development' ? '.env.development' : '.env');
+console.log('Zmienne środowiskowe:');
+console.log('- NODE_ENV:', process.env.NODE_ENV);
+console.log('- SUPABASE_URL:', process.env.SUPABASE_URL);
+console.log('- SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Ustawiony' : '❌ Brak');
+console.log('- MONGODB_URI:', process.env.MONGODB_URI);
+console.log('- PORT:', process.env.PORT);
+console.log('- ALLOWED_ORIGINS:', process.env.ALLOWED_ORIGINS);
 
 const app = express();
 const port = process.env.PORT || 3031;
 
-// Middleware
+// Konfiguracja CORS
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:5173'];
+console.log('CORS origin:', allowedOrigins);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: allowedOrigins,
   credentials: true
 }));
-app.use(express.json());
 
-// Routes
-app.use('/api/users', authMiddleware, userRoutes);
-app.use('/api/recipes', authMiddleware, recipeRoutes);
-app.use('/api/ai', authMiddleware, aiRoutes);
+// Konfiguracja parsowania JSON z obsługą błędów
+app.use(express.json({
+  verify: (req, res, buf) => {
+    try {
+      JSON.parse(buf);
+    } catch (e) {
+      res.status(400).json({ error: 'Invalid JSON' });
+      throw new Error('Invalid JSON');
+    }
+  }
+}));
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Middleware do sprawdzania pustego body dla POST/PUT requestów
+app.use((req, res, next) => {
+  if ((req.method === 'POST' || req.method === 'PUT') && !req.body) {
+    return res.status(400).json({ error: 'Empty request body' });
+  }
+  next();
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    error: err.message || 'Wystąpił błąd serwera'
-  });
-});
+// Middleware do autoryzacji
+import { authMiddleware } from './middleware/auth.js';
 
-// Connect to MongoDB
+// Połączenie z MongoDB
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('Połączono z MongoDB');
-    app.listen(port, () => {
-      console.log(`Serwer uruchomiony na porcie ${port}`);
-    });
+    
+    try {
+      // Resetowanie kolekcji
+      const collections = ['users', 'recipes', 'preferences'];
+      for (const collection of collections) {
+        try {
+          await mongoose.connection.db.dropCollection(collection);
+          console.log(`✅ Usunięto kolekcję ${collection}`);
+        } catch (error) {
+          if (error.code !== 26) { // 26 = kolekcja nie istnieje
+            console.error(`❌ Błąd podczas usuwania kolekcji ${collection}:`, error);
+          } else {
+            console.log(`ℹ️ Kolekcja ${collection} nie istniała`);
+          }
+        }
+      }
+      
+      // Dodaj indeksy
+      await mongoose.connection.db.collection('users').createIndex({ supabaseId: 1 }, { unique: true });
+      await mongoose.connection.db.collection('users').createIndex({ email: 1 }, { unique: true });
+      console.log('✅ Dodano indeksy do kolekcji users');
+      
+    } catch (error) {
+      console.error('❌ Błąd podczas konfiguracji bazy danych:', error);
+    }
   })
   .catch((error) => {
-    console.error('Błąd połączenia z MongoDB:', error);
+    console.error('❌ Błąd połączenia z MongoDB:', error);
     process.exit(1);
   });
+
+// Routy
+app.use('/api/users', authMiddleware, userRoutes);
+app.use('/api/dashboard', authMiddleware, dashboardRoutes);
+app.use('/api/recipes', authMiddleware, recipesRoutes);
+
+app.listen(port, () => {
+  console.log(`Serwer uruchomiony na porcie ${port}`);
+});

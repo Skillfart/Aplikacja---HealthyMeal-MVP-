@@ -3,117 +3,83 @@ import mongoose from 'mongoose';
 const recipeSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: true
+    required: true,
+    trim: true
+  },
+  description: {
+    type: String,
+    trim: true,
+    default: ''
   },
   author: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  ingredients: [{
-    ingredient: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Ingredient',
-      required: true
-    },
-    quantity: {
-      type: Number,
-      required: true
-    },
-    unit: {
-      type: String,
-      required: true
-    },
-    isOptional: {
-      type: Boolean,
-      default: false
-    }
-  }],
-  steps: [{
-    number: {
-      type: Number,
-      required: true
-    },
-    description: {
-      type: String,
-      required: true
-    },
-    estimatedTime: {
-      type: Number, // w minutach
-      required: true
-    }
-  }],
-  preparationTime: {
-    type: Number, // całkowity czas w minutach
-    required: true
-  },
-  difficulty: {
     type: String,
-    enum: ['easy', 'medium', 'hard'],
-    required: true
+    required: true,
+    index: true
+  },
+  ingredients: {
+    type: [{
+      name: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      quantity: {
+        type: String,
+        required: true,
+        trim: true
+      },
+      unit: {
+        type: String,
+        required: true,
+        trim: true,
+        default: 'g'
+      }
+    }],
+    required: true,
+    default: []
+  },
+  instructions: {
+    type: [String],
+    required: true,
+    default: []
+  },
+  preparationTime: {
+    type: Number,
+    required: true,
+    min: 1,
+    default: 30
   },
   servings: {
     type: Number,
     required: true,
-    min: 1
+    min: 1,
+    default: 4
   },
-  tags: [{
-    type: String
-  }],
-  nutritionalValues: {
-    totalCalories: Number,
-    totalCarbs: Number,
-    totalProtein: Number,
-    totalFat: Number,
-    totalFiber: Number,
-    caloriesPerServing: Number,
-    carbsPerServing: Number
-  },
-  isModified: {
-    type: Boolean,
-    default: false
-  },
-  originalRecipe: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Recipe',
-    default: null
+  hashtags: {
+    type: [String],
+    default: [],
+    set: function(tags) {
+      // Konwertuj string z przecinkami na tablicę, jeśli potrzeba
+      if (typeof tags === 'string') {
+        return tags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+      }
+      return tags;
+    }
   }
 }, {
-  timestamps: true
+  timestamps: true // Automatycznie dodaje createdAt i updatedAt
 });
 
-// Middleware do automatycznego obliczania wartości odżywczych
-recipeSchema.pre('save', async function(next) {
-  if (this.isModified('ingredients')) {
-    let totalCalories = 0;
-    let totalCarbs = 0;
-    let totalProtein = 0;
-    let totalFat = 0;
-    let totalFiber = 0;
+// Indeksy
+recipeSchema.index({ author: 1, createdAt: -1 });
+recipeSchema.index({ hashtags: 1 });
+recipeSchema.index({ title: 'text', description: 'text' }); // Indeks tekstowy dla wyszukiwania
 
-    // Pobierz wszystkie składniki
-    const populatedRecipe = await this.populate('ingredients.ingredient');
-    
-    for (const item of populatedRecipe.ingredients) {
-      const { nutritionalValues } = item.ingredient;
-      const ratio = item.quantity / 100; // przelicznik na 100g/ml
-
-      totalCalories += nutritionalValues.calories * ratio;
-      totalCarbs += nutritionalValues.carbs * ratio;
-      totalProtein += nutritionalValues.protein * ratio;
-      totalFat += nutritionalValues.fat * ratio;
-      totalFiber += (nutritionalValues.fiber || 0) * ratio;
-    }
-
-    this.nutritionalValues = {
-      totalCalories: Math.round(totalCalories),
-      totalCarbs: Math.round(totalCarbs),
-      totalProtein: Math.round(totalProtein),
-      totalFat: Math.round(totalFat),
-      totalFiber: Math.round(totalFiber),
-      caloriesPerServing: Math.round(totalCalories / this.servings),
-      carbsPerServing: Math.round(totalCarbs / this.servings)
-    };
+// Middleware do walidacji hashtags
+recipeSchema.pre('save', function(next) {
+  if (this.isModified('hashtags')) {
+    // Usuń puste tagi i duplikaty
+    this.hashtags = [...new Set(this.hashtags.filter(tag => tag.trim().length > 0))];
   }
   next();
 });

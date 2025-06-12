@@ -3,21 +3,18 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export const ProtectedRoute = ({ children }) => {
-  const { session, loading } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
       <div className="loading-screen">
-        <div className="loading-content">
-          <h2>Ładowanie...</h2>
-          <div className="loading-spinner"></div>
-        </div>
+        <div className="loading-spinner" />
       </div>
     );
   }
 
-  if (!session) {
-    return <Navigate to="/" replace />;
+  if (!user) {
+    return <Navigate to="/login" />;
   }
 
   return children;

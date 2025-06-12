@@ -18,12 +18,13 @@ const userSchema = new mongoose.Schema({
   preferences: {
     dietType: {
       type: String,
-      enum: ['normal', 'vegetarian', 'vegan', 'lowCarb', 'keto'],
+      enum: ['normal', 'keto', 'lowCarb', 'paleo', 'vegetarian', 'vegan', 'glutenFree', 'dairyFree'],
       default: 'normal'
     },
     maxCarbs: {
       type: Number,
-      default: 0
+      default: 0,
+      min: 0
     },
     excludedProducts: {
       type: [String],
@@ -31,43 +32,74 @@ const userSchema = new mongoose.Schema({
     },
     allergens: {
       type: [String],
+      enum: {
+        values: ['gluten', 'dairy', 'nuts', 'eggs', 'soy', 'shellfish', 'fish', 'peanuts'],
+        message: 'Nieprawidłowy alergen'
+      },
       default: []
     }
   },
   aiUsage: {
-    date: {
-      type: Date,
-      default: Date.now
-    },
     count: {
       type: Number,
-      default: 0
+      default: 0,
+      min: 0
+    },
+    lastReset: {
+      type: Date,
+      default: Date.now
     }
+  },
+  recipes: {
+    type: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Recipe'
+    }],
+    default: []
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
-}, {
-  timestamps: true
 });
 
-// Metoda do resetowania licznika AI jeśli to nowy dzień
-userSchema.methods.resetAiUsageIfNewDay = function() {
-  const today = new Date();
-  const usageDate = this.aiUsage.date;
+// Aktualizuj updatedAt przed zapisem
+userSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
+});
+
+// Metoda do resetowania licznika AI jeśli minął dzień
+userSchema.methods.resetAIUsageIfNeeded = function() {
+  const now = new Date();
+  const lastReset = new Date(this.aiUsage.lastReset);
   
-  if (today.getDate() !== usageDate.getDate() ||
-      today.getMonth() !== usageDate.getMonth() ||
-      today.getFullYear() !== usageDate.getFullYear()) {
-    this.aiUsage.date = today;
+  if (now.getDate() !== lastReset.getDate() || 
+      now.getMonth() !== lastReset.getMonth() || 
+      now.getFullYear() !== lastReset.getFullYear()) {
     this.aiUsage.count = 0;
+    this.aiUsage.lastReset = now;
   }
 };
 
 // Metoda do inkrementacji licznika użycia AI
 userSchema.methods.incrementAiUsage = function() {
-  this.resetAiUsageIfNewDay();
-  if (this.aiUsage.count >= 5) {
-    throw new Error('Przekroczono dzienny limit użyć AI');
+  this.resetAIUsageIfNeeded();
+  
+  const dailyLimit = process.env.DAILY_LIMIT || 10;
+  
+  if (this.aiUsage.count >= dailyLimit) {
+    throw new Error('Przekroczono dzienny limit użycia AI');
   }
+  
   this.aiUsage.count += 1;
 };
 
-export const User = mongoose.model('User', userSchema);
+// Sprawdź czy model już istnieje przed jego utworzeniem
+const User = mongoose.models.User || mongoose.model('User', userSchema);
+
+export default User;

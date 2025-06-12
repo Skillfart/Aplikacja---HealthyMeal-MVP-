@@ -1,13 +1,14 @@
 import express from 'express';
 import { Recipe } from '../models/Recipe.js';
-import { User } from '../models/User.js';
+import User from '../models/User.js';
+import { modifyRecipeWithAI } from '../services/openRouterService.js';
 
 const router = express.Router();
 
 // Pobierz wszystkie przepisy użytkownika
 router.get('/', async (req, res) => {
   try {
-    const { search, tags, difficulty, maxPreparationTime, page = 1, limit = 10 } = req.query;
+    const { search, hashtags, page = 1, limit = 10 } = req.query;
     
     const query = { author: req.user.id };
     
@@ -15,23 +16,15 @@ router.get('/', async (req, res) => {
       query.title = { $regex: search, $options: 'i' };
     }
     
-    if (tags) {
-      query.tags = { $all: tags.split(',') };
-    }
-    
-    if (difficulty) {
-      query.difficulty = difficulty;
-    }
-    
-    if (maxPreparationTime) {
-      query.preparationTime = { $lte: parseInt(maxPreparationTime) };
+    if (hashtags) {
+      const tagList = hashtags.split(',').map(tag => tag.trim());
+      query.hashtags = { $all: tagList };
     }
 
     const skip = (page - 1) * limit;
     
     const [recipes, total] = await Promise.all([
       Recipe.find(query)
-        .populate('ingredients.ingredient')
         .skip(skip)
         .limit(parseInt(limit))
         .sort({ createdAt: -1 }),
@@ -56,7 +49,7 @@ router.get('/:id', async (req, res) => {
     const recipe = await Recipe.findOne({
       _id: req.params.id,
       author: req.user.id
-    }).populate('ingredients.ingredient');
+    });
 
     if (!recipe) {
       return res.status(404).json({ error: 'Przepis nie znaleziony' });
@@ -75,32 +68,42 @@ router.post('/', async (req, res) => {
     const {
       title,
       ingredients,
-      steps,
-      preparationTime,
-      difficulty,
-      servings,
-      tags
+      instructions,
+      hashtags
     } = req.body;
+
+    // Walidacja wymaganych pól
+    if (!title || !ingredients || !instructions) {
+      return res.status(400).json({ 
+        error: 'Brak wymaganych pól',
+        details: {
+          title: !title ? 'Tytuł jest wymagany' : null,
+          ingredients: !ingredients ? 'Składniki są wymagane' : null,
+          instructions: !instructions ? 'Instrukcje są wymagane' : null
+        }
+      });
+    }
 
     const recipe = new Recipe({
       title,
       author: req.user.id,
-      ingredients,
-      steps,
-      preparationTime,
-      difficulty,
-      servings,
-      tags
+      ingredients: Array.isArray(ingredients) ? ingredients : [ingredients],
+      instructions,
+      hashtags: hashtags || []
     });
 
     await recipe.save();
-    
-    const populatedRecipe = await Recipe.findById(recipe._id)
-      .populate('ingredients.ingredient');
-
-    res.status(201).json(populatedRecipe);
+    res.status(201).json(recipe);
   } catch (error) {
     console.error('Błąd podczas tworzenia przepisu:', error);
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        error: 'Błąd walidacji',
+        details: Object.values(error.errors).map(err => err.message)
+      });
+    }
+    
     res.status(500).json({ error: 'Błąd serwera podczas tworzenia przepisu' });
   }
 });
@@ -120,29 +123,28 @@ router.put('/:id', async (req, res) => {
     const {
       title,
       ingredients,
-      steps,
-      preparationTime,
-      difficulty,
-      servings,
-      tags
+      instructions,
+      hashtags
     } = req.body;
 
-    recipe.title = title;
-    recipe.ingredients = ingredients;
-    recipe.steps = steps;
-    recipe.preparationTime = preparationTime;
-    recipe.difficulty = difficulty;
-    recipe.servings = servings;
-    recipe.tags = tags;
+    // Aktualizuj tylko przesłane pola
+    if (title) recipe.title = title;
+    if (ingredients) recipe.ingredients = Array.isArray(ingredients) ? ingredients : [ingredients];
+    if (instructions) recipe.instructions = instructions;
+    if (hashtags) recipe.hashtags = hashtags;
 
     await recipe.save();
-    
-    const populatedRecipe = await Recipe.findById(recipe._id)
-      .populate('ingredients.ingredient');
-
-    res.json(populatedRecipe);
+    res.json(recipe);
   } catch (error) {
     console.error('Błąd podczas aktualizacji przepisu:', error);
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ 
+        error: 'Błąd walidacji',
+        details: Object.values(error.errors).map(err => err.message)
+      });
+    }
+    
     res.status(500).json({ error: 'Błąd serwera podczas aktualizacji przepisu' });
   }
 });
@@ -163,6 +165,67 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     console.error('Błąd podczas usuwania przepisu:', error);
     res.status(500).json({ error: 'Błąd serwera podczas usuwania przepisu' });
+  }
+});
+
+// Modyfikuj przepis przez AI
+router.post('/:id/ai-modify', async (req, res) => {
+  try {
+    const recipe = await Recipe.findOne({
+      _id: req.params.id,
+      author: req.user.id
+    }).populate('ingredients.ingredient');
+
+    if (!recipe) {
+      return res.status(404).json({ error: 'Przepis nie znaleziony' });
+    }
+
+    // Sprawdź czy użytkownik ma dostępne modyfikacje AI
+    await req.mongoUser.resetAIUsageIfNeeded();
+    const dailyLimit = process.env.DAILY_AI_LIMIT || 5;
+    
+    if (req.mongoUser.aiUsage.count >= dailyLimit) {
+      return res.status(429).json({ 
+        error: 'Przekroczono dzienny limit użycia AI',
+        current: req.mongoUser.aiUsage.count,
+        limit: dailyLimit
+      });
+    }
+
+    // Pobierz preferencje użytkownika
+    const userPreferences = req.mongoUser.preferences;
+
+    // Modyfikuj przepis przez AI
+    const modifiedRecipe = await modifyRecipeWithAI(recipe, userPreferences);
+
+    // Inkrementuj licznik AI
+    req.mongoUser.incrementAiUsage();
+    await req.mongoUser.save();
+
+    // Zapisz zmodyfikowany przepis jako nowy
+    const newRecipe = new Recipe({
+      ...modifiedRecipe,
+      author: req.user.id,
+      isModified: true,
+      originalRecipe: recipe._id
+    });
+
+    await newRecipe.save();
+    
+    const populatedNewRecipe = await Recipe.findById(newRecipe._id)
+      .populate('ingredients.ingredient');
+
+    res.json({
+      recipe: populatedNewRecipe,
+      aiUsage: {
+        current: req.mongoUser.aiUsage.count,
+        limit: dailyLimit,
+        remaining: dailyLimit - req.mongoUser.aiUsage.count
+      }
+    });
+  } catch (error) {
+    console.error('Błąd podczas modyfikacji przepisu przez AI:', error);
+    res.status(500).json({ error: 'Błąd serwera podczas modyfikacji przepisu przez AI' });
   }
 });
 

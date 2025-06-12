@@ -1,36 +1,51 @@
-const express = require('express');
-const cors = require('cors');
-const morgan = require('morgan');
-const userRoutes = require('./routes/user');
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import { authMiddleware } from './middleware/auth.js';
+import recipesRouter from './routes/recipes.js';
+import usersRouter from './routes/users.js';
+
+// Konfiguracja zmiennych środowiskowych
+dotenv.config();
 
 const app = express();
 
-// Konfiguracja CORS
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}));
-
+// Middleware
+app.use(cors());
 app.use(express.json());
-app.use(morgan('dev'));
 
-// Endpoint zdrowia
-app.get('/health', (_, res) => res.json({ status: 'ok' }));
+// Połączenie z MongoDB
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('✅ Połączono z MongoDB'))
+  .catch(err => {
+    console.error('❌ Błąd połączenia z MongoDB:', err);
+    process.exit(1);
+  });
 
-// Routy
-app.use('/api/users', userRoutes);
+// Indeksy dla kolekcji recipes
+const Recipe = mongoose.model('Recipe');
+Recipe.collection.createIndex({ author: 1 });
+Recipe.collection.createIndex({ createdAt: -1 });
+Recipe.collection.createIndex({ tags: 1 });
+
+// Middleware autoryzacji dla wszystkich endpointów API
+app.use('/api', authMiddleware);
+
+// Routery
+app.use('/api/recipes', recipesRouter);
+app.use('/api/users', usersRouter);
 
 // Obsługa błędów
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Wystąpił błąd serwera' });
+  console.error('❌ Błąd serwera:', err);
+  res.status(500).json({ error: 'Błąd serwera' });
 });
 
-// Obsługa nieznalezionych endpointów
-app.use((req, res) => {
-  res.status(404).json({ message: 'Nie znaleziono endpointu' });
+// Nasłuchiwanie
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`✅ Serwer uruchomiony na porcie ${PORT}`);
 });
 
-module.exports = app;
+export default app; 

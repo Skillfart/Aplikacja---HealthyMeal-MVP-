@@ -1,34 +1,34 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { createContext, useContext, useState } from 'react';
+import { BrowserRouter as Router } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import LandingPage from './components/LandingPage';
-import LoginPage from './components/LoginPage';
-import RegisterPage from './components/RegisterPage';
-import Dashboard from './components/Dashboard';
+import { AIProvider } from './contexts/AIContext';
+import NavigationBar from './components/NavigationBar';
+import AppRoutes from './AppRoutes';
+import './index.css';
 
-function App() {
+export const RefreshContext = createContext();
+
+const App = () => {
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const triggerRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
   return (
     <AuthProvider>
-      <Router>
-        <div className="app">
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </div>
-      </Router>
+      <AIProvider>
+        <Router>
+          <RefreshContext.Provider value={{ refreshKey, triggerRefresh }}>
+            <div className="app">
+              <NavigationBar />
+              <AppRoutes />
+            </div>
+          </RefreshContext.Provider>
+        </Router>
+      </AIProvider>
     </AuthProvider>
   );
-}
+};
 
 export default App;

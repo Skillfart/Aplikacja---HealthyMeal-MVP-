@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '../supabase';
+import { createClient } from '@supabase/supabase-js';
 
 const AuthContext = createContext({});
 
@@ -16,6 +16,16 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const supabase = createClient(
+    import.meta.env.VITE_SUPABASE_URL,
+    import.meta.env.VITE_SUPABASE_ANON_KEY
+  );
+
+  const refreshData = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -28,7 +38,18 @@ export const AuthProvider = ({ children }) => {
         if (mounted) {
           if (error) throw error;
           setSession(session);
-          setUser(session?.user ?? null);
+          if (session) {
+            console.log('Session data:', {
+              access_token: session.access_token ? '✅ Present' : '❌ Missing',
+              user: session.user ? '✅ Present' : '❌ Missing'
+            });
+            setUser({
+              ...session.user,
+              access_token: session.access_token
+            });
+          } else {
+            setUser(null);
+          }
         }
       } catch (error) {
         if (mounted) {
@@ -48,8 +69,20 @@ export const AuthProvider = ({ children }) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (mounted) {
         console.log('Zmiana stanu autoryzacji:', event);
+        console.log('Session data:', {
+          access_token: session?.access_token ? '✅ Present' : '❌ Missing',
+          user: session?.user ? '✅ Present' : '❌ Missing'
+        });
+        
         setSession(session);
-        setUser(session?.user ?? null);
+        if (session) {
+          setUser({
+            ...session.user,
+            access_token: session.access_token
+          });
+        } else {
+          setUser(null);
+        }
         setLoading(false);
       }
     });
@@ -73,8 +106,19 @@ export const AuthProvider = ({ children }) => {
           password
         });
         if (error) throw error;
+        
+        console.log('Sign in data:', {
+          access_token: data.session?.access_token ? '✅ Present' : '❌ Missing',
+          user: data.user ? '✅ Present' : '❌ Missing'
+        });
+        
         setSession(data.session);
-        setUser(data.user);
+        if (data.session) {
+          setUser({
+            ...data.user,
+            access_token: data.session.access_token
+          });
+        }
         return { error: null };
       } catch (error) {
         console.error('Błąd logowania:', error);
@@ -90,8 +134,19 @@ export const AuthProvider = ({ children }) => {
           password
         });
         if (error) throw error;
+        
+        console.log('Sign up data:', {
+          access_token: data.session?.access_token ? '✅ Present' : '❌ Missing',
+          user: data.user ? '✅ Present' : '❌ Missing'
+        });
+        
         setSession(data.session);
-        setUser(data.user);
+        if (data.session) {
+          setUser({
+            ...data.user,
+            access_token: data.session.access_token
+          });
+        }
         return { error: null };
       } catch (error) {
         console.error('Błąd rejestracji:', error);
@@ -104,13 +159,16 @@ export const AuthProvider = ({ children }) => {
         setError(null);
         const { error } = await supabase.auth.signOut();
         if (error) throw error;
+        setUser(null);
+        setSession(null);
         return { error: null };
       } catch (error) {
         console.error('Błąd wylogowania:', error);
         setError(error.message);
         return { error };
       }
-    }
+    },
+    refreshData
   };
 
   return (
