@@ -3,7 +3,26 @@ export const validateEmail = (email) => {
   if (!email || typeof email !== 'string') return false;
   
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email.trim());
+  const trimmedEmail = email.trim();
+  
+  // Basic regex check
+  if (!emailRegex.test(trimmedEmail)) return false;
+  
+  // Additional checks for edge cases
+  // No consecutive dots
+  if (trimmedEmail.includes('..')) return false;
+  
+  // No starting or ending dots
+  if (trimmedEmail.startsWith('.') || trimmedEmail.endsWith('.')) return false;
+  
+  // Domain part should not start or end with dots
+  const parts = trimmedEmail.split('@');
+  if (parts.length !== 2) return false;
+  
+  const domain = parts[1];
+  if (domain.startsWith('.') || domain.endsWith('.')) return false;
+  
+  return true;
 };
 
 // Password validation
@@ -38,7 +57,7 @@ export const validateRecipe = (recipe) => {
   }
   
   // Servings should be positive
-  if (recipe.servings && (typeof recipe.servings !== 'number' || recipe.servings <= 0)) return false;
+  if (recipe.servings !== undefined && (typeof recipe.servings !== 'number' || recipe.servings <= 0)) return false;
   
   return true;
 };

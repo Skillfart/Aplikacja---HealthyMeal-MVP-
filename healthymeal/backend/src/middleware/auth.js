@@ -1,20 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 import User from '../models/User.js';
 
-// Sprawdzenie zmiennych środowiskowych
-console.log('Konfiguracja Supabase:');
-console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
-console.log('SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Ustawiony' : '❌ Brak');
-
 // W trybie testowym nie przerywamy procesu
 const isTestMode = process.env.NODE_ENV === 'test' || process.env.VITEST;
 
+// Sprawdzenie zmiennych środowiskowych tylko w trybie produkcyjnym
+if (!isTestMode) {
+  console.log('Konfiguracja Supabase:');
+  console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
+  console.log('SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Ustawiony' : '❌ Brak');
+}
+
 if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-  console.error('❌ Brak konfiguracji Supabase. Sprawdź zmienne środowiskowe:');
-  console.error('- SUPABASE_URL:', process.env.SUPABASE_URL || '❌ Brak');
-  console.error('- SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Ustawiony' : '❌ Brak');
-  
   if (!isTestMode) {
+    console.error('❌ Brak konfiguracji Supabase. Sprawdź zmienne środowiskowe:');
+    console.error('- SUPABASE_URL:', process.env.SUPABASE_URL || '❌ Brak');
+    console.error('- SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Ustawiony' : '❌ Brak');
     process.exit(1);
   }
 }
@@ -39,7 +40,9 @@ export const authMiddleware = async (req, res, next) => {
   try {
     // Sprawdź czy jest nagłówek autoryzacji
     const authHeader = req.headers.authorization;
-    console.log('Auth header:', authHeader ? '✅ Present' : '❌ Missing');
+    if (!isTestMode) {
+      console.log('Auth header:', authHeader ? '✅ Present' : '❌ Missing');
+    }
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'Brak tokenu autoryzacji' });
@@ -48,7 +51,9 @@ export const authMiddleware = async (req, res, next) => {
     // Sprawdź format tokenu
     const token = authHeader.split(' ')[1];
     const isValidJWT = token && token.split('.').length === 3;
-    console.log('Token format:', isValidJWT ? '✅ Valid JWT' : '❌ Invalid format');
+    if (!isTestMode) {
+      console.log('Token format:', isValidJWT ? '✅ Valid JWT' : '❌ Invalid format');
+    }
 
     if (!isValidJWT) {
       return res.status(401).json({ error: 'Nieprawidłowy format tokenu' });
@@ -57,10 +62,12 @@ export const authMiddleware = async (req, res, next) => {
     // Zweryfikuj token w Supabase
     const { data: { user }, error } = await supabase.auth.getUser(token);
     
-    console.log('Auth result:', {
-      user: user ? '✅ User found' : '❌ No user',
-      error: error ? `❌ ${error.message}` : '✅ No error'
-    });
+    if (!isTestMode) {
+      console.log('Auth result:', {
+        user: user ? '✅ User found' : '❌ No user',
+        error: error ? `❌ ${error.message}` : '✅ No error'
+      });
+    }
 
     if (error || !user) {
       return res.status(401).json({ error: 'Nieprawidłowy token' });
@@ -71,10 +78,12 @@ export const authMiddleware = async (req, res, next) => {
       let mongoUser = await User.findOne({ supabaseId: user.id });
       
       if (!mongoUser) {
-        console.log('Tworzenie/aktualizacja użytkownika:', {
-          supabaseId: user.id,
-          email: user.email
-        });
+        if (!isTestMode) {
+          console.log('Tworzenie/aktualizacja użytkownika:', {
+            supabaseId: user.id,
+            email: user.email
+          });
+        }
 
         // Użyj findOneAndUpdate z upsert:true aby uniknąć race condition
         mongoUser = await User.findOneAndUpdate(
@@ -95,9 +104,13 @@ export const authMiddleware = async (req, res, next) => {
           }
         );
 
-        console.log('✅ Użytkownik utworzony/zaktualizowany:', mongoUser._id);
+        if (!isTestMode) {
+          console.log('✅ Użytkownik utworzony/zaktualizowany:', mongoUser._id);
+        }
       } else {
-        console.log('✅ Znaleziono istniejącego użytkownika:', mongoUser._id);
+        if (!isTestMode) {
+          console.log('✅ Znaleziono istniejącego użytkownika:', mongoUser._id);
+        }
       }
 
       // Dodaj użytkownika do obiektu request
@@ -105,11 +118,15 @@ export const authMiddleware = async (req, res, next) => {
       req.mongoUser = mongoUser;
       next();
     } catch (dbError) {
-      console.error('❌ Błąd bazy danych:', dbError);
+      if (!isTestMode) {
+        console.error('❌ Błąd bazy danych:', dbError);
+      }
       
       // Obsługa duplikatów
       if (dbError.code === 11000) {
-        console.log('Znaleziono duplikat, próba ponownego pobrania...');
+        if (!isTestMode) {
+          console.log('Znaleziono duplikat, próba ponownego pobrania...');
+        }
         try {
           const existingUser = await User.findOne({ supabaseId: user.id });
           if (existingUser) {
@@ -118,12 +135,14 @@ export const authMiddleware = async (req, res, next) => {
             return next();
           }
         } catch (retryError) {
-          console.error('❌ Błąd podczas próby ponownego pobrania:', retryError);
+          if (!isTestMode) {
+            console.error('❌ Błąd podczas próby ponownego pobrania:', retryError);
+          }
         }
       }
       
       // Szczegółowe logowanie błędów walidacji
-      if (dbError.name === 'ValidationError') {
+      if (dbError.name === 'ValidationError' && !isTestMode) {
         console.error('Szczegóły błędu walidacji:');
         Object.keys(dbError.errors).forEach(key => {
           console.error(`- ${key}:`, dbError.errors[key].message);
@@ -133,7 +152,13 @@ export const authMiddleware = async (req, res, next) => {
       return res.status(500).json({ error: 'Błąd serwera podczas autoryzacji' });
     }
   } catch (error) {
-    console.error('❌ Błąd autoryzacji:', error);
+    if (!isTestMode) {
+      console.error('❌ Błąd autoryzacji:', error);
+    }
     return res.status(500).json({ error: 'Błąd serwera podczas autoryzacji' });
   }
 };
+
+// Eksport domyślny dla kompatybilności
+export const auth = authMiddleware;
+export default authMiddleware;

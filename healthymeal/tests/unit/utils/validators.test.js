@@ -1,4 +1,5 @@
 // unit/utils/validators.test.js - Test walidatorów
+import { describe, test, expect } from 'vitest';
 import { 
   validateEmail, 
   validatePassword, 

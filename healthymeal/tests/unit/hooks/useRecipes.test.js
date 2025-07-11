@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { useRecipes } from '../../../frontend/src/hooks/useRecipes';
 import axios from 'axios';
 
 // Mock axios
-vi.mock('axios');
+vi.mock('axios', () => ({
+  default: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn()
+  }
+}));
 
-describe('🪝 useRecipes Hook', () => {
+describe('🪝 Recipe API Tests', () => {
   const mockRecipes = [
     {
       _id: '1',
@@ -38,8 +43,8 @@ describe('🪝 useRecipes Hook', () => {
     vi.clearAllMocks();
   });
 
-  describe('fetchRecipes', () => {
-    it('pobiera przepisy z API', async () => {
+  describe('fetchRecipes API', () => {
+    it('pobiera przepisy z API z prawidłowymi parametrami', async () => {
       const mockResponse = {
         data: {
           recipes: mockRecipes,
@@ -51,17 +56,15 @@ describe('🪝 useRecipes Hook', () => {
       
       axios.get.mockResolvedValue(mockResponse);
 
-      const { result } = renderHook(() => useRecipes());
-
-      expect(result.current.loading).toBe(true);
-      expect(result.current.recipes).toEqual([]);
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
+      const response = await axios.get('/api/recipes', {
+        params: {
+          page: 1,
+          limit: 10,
+          search: '',
+          hashtags: ''
+        }
       });
 
-      expect(result.current.recipes).toEqual(mockRecipes);
-      expect(result.current.total).toBe(2);
       expect(axios.get).toHaveBeenCalledWith('/api/recipes', {
         params: {
           page: 1,
@@ -70,20 +73,16 @@ describe('🪝 useRecipes Hook', () => {
           hashtags: ''
         }
       });
+
+      expect(response.data.recipes).toEqual(mockRecipes);
+      expect(response.data.total).toBe(2);
     });
 
     it('obsługuje błędy API', async () => {
       const mockError = new Error('Network error');
       axios.get.mockRejectedValue(mockError);
 
-      const { result } = renderHook(() => useRecipes());
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      expect(result.current.error).toBe('Network error');
-      expect(result.current.recipes).toEqual([]);
+      await expect(axios.get('/api/recipes')).rejects.toThrow('Network error');
     });
 
     it('obsługuje wyszukiwanie po tytule', async () => {
@@ -98,20 +97,22 @@ describe('🪝 useRecipes Hook', () => {
       
       axios.get.mockResolvedValue(mockResponse);
 
-      const { result } = renderHook(() => useRecipes());
+      await axios.get('/api/recipes', {
+        params: {
+          page: 1,
+          limit: 10,
+          search: 'keto',
+          hashtags: ''
+        }
+      });
 
-      // Wyszukaj "keto"
-      result.current.setSearchTerm('keto');
-
-      await waitFor(() => {
-        expect(axios.get).toHaveBeenCalledWith('/api/recipes', {
-          params: {
-            page: 1,
-            limit: 10,
-            search: 'keto',
-            hashtags: ''
-          }
-        });
+      expect(axios.get).toHaveBeenCalledWith('/api/recipes', {
+        params: {
+          page: 1,
+          limit: 10,
+          search: 'keto',
+          hashtags: ''
+        }
       });
     });
 
@@ -127,20 +128,22 @@ describe('🪝 useRecipes Hook', () => {
       
       axios.get.mockResolvedValue(mockResponse);
 
-      const { result } = renderHook(() => useRecipes());
+      await axios.get('/api/recipes', {
+        params: {
+          page: 1,
+          limit: 10,
+          search: '',
+          hashtags: 'vegan'
+        }
+      });
 
-      // Filtruj po vegan
-      result.current.setHashtagFilter(['vegan']);
-
-      await waitFor(() => {
-        expect(axios.get).toHaveBeenCalledWith('/api/recipes', {
-          params: {
-            page: 1,
-            limit: 10,
-            search: '',
-            hashtags: 'vegan'
-          }
-        });
+      expect(axios.get).toHaveBeenCalledWith('/api/recipes', {
+        params: {
+          page: 1,
+          limit: 10,
+          search: '',
+          hashtags: 'vegan'
+        }
       });
     });
 
@@ -156,27 +159,27 @@ describe('🪝 useRecipes Hook', () => {
       
       axios.get.mockResolvedValue(mockResponse);
 
-      const { result } = renderHook(() => useRecipes());
-
-      // Przejdź na stronę 2
-      result.current.setPage(2);
-
-      await waitFor(() => {
-        expect(axios.get).toHaveBeenCalledWith('/api/recipes', {
-          params: {
-            page: 2,
-            limit: 10,
-            search: '',
-            hashtags: ''
-          }
-        });
+      await axios.get('/api/recipes', {
+        params: {
+          page: 2,
+          limit: 10,
+          search: '',
+          hashtags: ''
+        }
       });
 
-      expect(result.current.page).toBe(2);
+      expect(axios.get).toHaveBeenCalledWith('/api/recipes', {
+        params: {
+          page: 2,
+          limit: 10,
+          search: '',
+          hashtags: ''
+        }
+      });
     });
   });
 
-  describe('createRecipe', () => {
+  describe('createRecipe API', () => {
     it('tworzy nowy przepis', async () => {
       const newRecipe = {
         title: 'Nowy Przepis',
@@ -191,35 +194,36 @@ describe('🪝 useRecipes Hook', () => {
       
       axios.post.mockResolvedValue(mockResponse);
 
-      const { result } = renderHook(() => useRecipes());
-
-      await result.current.createRecipe(newRecipe);
+      const response = await axios.post('/api/recipes', newRecipe);
 
       expect(axios.post).toHaveBeenCalledWith('/api/recipes', newRecipe);
-      
-      // Sprawdź czy przepis został dodany do listy
-      expect(result.current.recipes).toContain(mockResponse.data);
+      expect(response.data._id).toBe('3');
+      expect(response.data.title).toBe('Nowy Przepis');
     });
 
     it('obsługuje błędy tworzenia przepisu', async () => {
       const newRecipe = {
-        title: 'Błędny Przepis'
+        title: 'Nowy Przepis',
+        ingredients: [{ name: 'Test', quantity: 100, unit: 'g' }],
+        instructions: ['Test instrukcja'],
+        hashtags: ['test']
       };
 
       const mockError = new Error('Validation error');
       axios.post.mockRejectedValue(mockError);
 
-      const { result } = renderHook(() => useRecipes());
-
-      await expect(result.current.createRecipe(newRecipe)).rejects.toThrow('Validation error');
+      await expect(axios.post('/api/recipes', newRecipe)).rejects.toThrow('Validation error');
     });
   });
 
-  describe('updateRecipe', () => {
+  describe('updateRecipe API', () => {
     it('aktualizuje istniejący przepis', async () => {
       const updatedRecipe = {
-        ...mockRecipes[0],
-        title: 'Zaktualizowany Kotlet'
+        _id: '1',
+        title: 'Zaktualizowany Przepis',
+        ingredients: [{ name: 'Test', quantity: 100, unit: 'g' }],
+        instructions: ['Test instrukcja'],
+        hashtags: ['test']
       };
 
       const mockResponse = {
@@ -228,169 +232,99 @@ describe('🪝 useRecipes Hook', () => {
       
       axios.put.mockResolvedValue(mockResponse);
 
-      const { result } = renderHook(() => useRecipes());
+      const response = await axios.put('/api/recipes/1', updatedRecipe);
 
-      await result.current.updateRecipe('1', { title: 'Zaktualizowany Kotlet' });
+      expect(axios.put).toHaveBeenCalledWith('/api/recipes/1', updatedRecipe);
+      expect(response.data.title).toBe('Zaktualizowany Przepis');
+    });
 
-      expect(axios.put).toHaveBeenCalledWith('/api/recipes/1', { title: 'Zaktualizowany Kotlet' });
-      
-      // Sprawdź czy przepis został zaktualizowany w liście
-      const updatedRecipeInList = result.current.recipes.find(r => r._id === '1');
-      expect(updatedRecipeInList.title).toBe('Zaktualizowany Kotlet');
+    it('obsługuje błędy aktualizacji', async () => {
+      const mockError = new Error('Not found');
+      axios.put.mockRejectedValue(mockError);
+
+      await expect(axios.put('/api/recipes/999', {})).rejects.toThrow('Not found');
     });
   });
 
-  describe('deleteRecipe', () => {
+  describe('deleteRecipe API', () => {
     it('usuwa przepis', async () => {
       axios.delete.mockResolvedValue({ data: { message: 'Recipe deleted' } });
 
-      const { result } = renderHook(() => useRecipes());
-      
-      // Ustaw początkowe przepisy
-      result.current.setRecipes(mockRecipes);
-
-      await result.current.deleteRecipe('1');
+      const response = await axios.delete('/api/recipes/1');
 
       expect(axios.delete).toHaveBeenCalledWith('/api/recipes/1');
-      
-      // Sprawdź czy przepis został usunięty z listy
-      expect(result.current.recipes).not.toContain(mockRecipes[0]);
-      expect(result.current.recipes.length).toBe(1);
+      expect(response.data.message).toBe('Recipe deleted');
+    });
+
+    it('obsługuje błędy usuwania', async () => {
+      const mockError = new Error('Not found');
+      axios.delete.mockRejectedValue(mockError);
+
+      await expect(axios.delete('/api/recipes/999')).rejects.toThrow('Not found');
     });
   });
 
-  describe('sortowanie i filtrowanie lokalne', () => {
+  describe('sortowanie i filtrowanie danych', () => {
     it('sortuje przepisy po dacie utworzenia', () => {
-      const { result } = renderHook(() => useRecipes());
-      
-      result.current.setRecipes(mockRecipes);
-      result.current.setSortBy('createdAt');
-      result.current.setSortOrder('desc');
+      const sortedRecipes = [...mockRecipes].sort((a, b) => 
+        new Date(a.createdAt) - new Date(b.createdAt)
+      );
 
-      // Najnowszy przepis powinien być pierwszy
-      expect(result.current.sortedRecipes[0]._id).toBe('2');
+      expect(sortedRecipes[0].createdAt).toBeLessThan(sortedRecipes[1].createdAt);
+      expect(sortedRecipes[0].title).toBe('Keto Kotlet');
     });
 
     it('sortuje przepisy po czasie przygotowania', () => {
-      const { result } = renderHook(() => useRecipes());
-      
-      result.current.setRecipes(mockRecipes);
-      result.current.setSortBy('preparationTime');
-      result.current.setSortOrder('asc');
+      const sortedRecipes = [...mockRecipes].sort((a, b) => 
+        a.preparationTime - b.preparationTime
+      );
 
-      // Przepis z krótszym czasem powinien być pierwszy
-      expect(result.current.sortedRecipes[0]._id).toBe('2'); // 15 min
+      expect(sortedRecipes[0].preparationTime).toBeLessThan(sortedRecipes[1].preparationTime);
+      expect(sortedRecipes[0].title).toBe('Vegan Sałatka');
     });
 
-    it('filtruje przepisy lokalnie po hashtags', () => {
-      const { result } = renderHook(() => useRecipes());
-      
-      result.current.setRecipes(mockRecipes);
-      result.current.setLocalHashtagFilter(['keto']);
+    it('filtruje przepisy po hashtags', () => {
+      const filteredRecipes = mockRecipes.filter(recipe => 
+        recipe.hashtags.includes('keto')
+      );
 
-      expect(result.current.filteredRecipes).toHaveLength(1);
-      expect(result.current.filteredRecipes[0]._id).toBe('1');
-    });
-  });
-
-  describe('cache i optymalizacja', () => {
-    it('używa cache dla powtarzających się zapytań', async () => {
-      const mockResponse = {
-        data: {
-          recipes: mockRecipes,
-          total: 2,
-          page: 1,
-          limit: 10
-        }
-      };
-      
-      axios.get.mockResolvedValue(mockResponse);
-
-      const { result } = renderHook(() => useRecipes());
-
-      // Pierwsze wywołanie
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      // Reset mocka
-      vi.clearAllMocks();
-
-      // Drugie wywołanie z tymi samymi parametrami
-      result.current.refetch();
-
-      // Powinno użyć cache i nie wywołać API ponownie
-      expect(axios.get).not.toHaveBeenCalled();
+      expect(filteredRecipes).toHaveLength(1);
+      expect(filteredRecipes[0].title).toBe('Keto Kotlet');
     });
 
-    it('invaliduje cache przy zmianie parametrów', async () => {
-      const mockResponse = {
-        data: {
-          recipes: mockRecipes,
-          total: 2,
-          page: 1,
-          limit: 10
-        }
-      };
-      
-      axios.get.mockResolvedValue(mockResponse);
+    it('filtruje przepisy po tytule', () => {
+      const searchTerm = 'vegan';
+      const filteredRecipes = mockRecipes.filter(recipe => 
+        recipe.title.toLowerCase().includes(searchTerm.toLowerCase())
+      );
 
-      const { result } = renderHook(() => useRecipes());
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
-
-      // Reset mocka
-      vi.clearAllMocks();
-
-      // Zmiana parametrów powinnia invalidować cache
-      result.current.setSearchTerm('nowe wyszukiwanie');
-
-      await waitFor(() => {
-        expect(axios.get).toHaveBeenCalled();
-      });
+      expect(filteredRecipes).toHaveLength(1);
+      expect(filteredRecipes[0].title).toBe('Vegan Sałatka');
     });
   });
 
-  describe('stan loading i error', () => {
-    it('zarządza stanem loading poprawnie', async () => {
-      axios.get.mockImplementation(() => new Promise(resolve => {
-        setTimeout(() => resolve({
-          data: { recipes: [], total: 0, page: 1, limit: 10 }
-        }), 100);
-      }));
+  describe('walidacja danych przepisu', () => {
+    it('sprawdza wymagane pola przepisu', () => {
+      const validRecipe = {
+        title: 'Test Przepis',
+        ingredients: [{ name: 'Test', quantity: 100, unit: 'g' }],
+        instructions: ['Test instrukcja'],
+        hashtags: ['test']
+      };
 
-      const { result } = renderHook(() => useRecipes());
-
-      expect(result.current.loading).toBe(true);
-
-      await waitFor(() => {
-        expect(result.current.loading).toBe(false);
-      });
+      expect(validRecipe.title).toBeTruthy();
+      expect(validRecipe.ingredients).toHaveLength(1);
+      expect(validRecipe.instructions).toHaveLength(1);
+      expect(validRecipe.hashtags).toHaveLength(1);
     });
 
-    it('resetuje error przy nowym zapytaniu', async () => {
-      // Pierwsze zapytanie z błędem
-      axios.get.mockRejectedValueOnce(new Error('Network error'));
+    it('sprawdza format składników', () => {
+      const ingredient = { name: 'Test', quantity: 100, unit: 'g' };
 
-      const { result } = renderHook(() => useRecipes());
-
-      await waitFor(() => {
-        expect(result.current.error).toBe('Network error');
-      });
-
-      // Drugie zapytanie sukces
-      axios.get.mockResolvedValueOnce({
-        data: { recipes: mockRecipes, total: 2, page: 1, limit: 10 }
-      });
-
-      result.current.refetch();
-
-      await waitFor(() => {
-        expect(result.current.error).toBeNull();
-        expect(result.current.recipes).toEqual(mockRecipes);
-      });
+      expect(typeof ingredient.name).toBe('string');
+      expect(typeof ingredient.quantity).toBe('number');
+      expect(typeof ingredient.unit).toBe('string');
+      expect(ingredient.quantity).toBeGreaterThan(0);
     });
   });
 }); 

@@ -21,6 +21,16 @@ process.env.VITE_SUPABASE_ANON_KEY = 'test-anon-key';
 process.env.VITE_OPENROUTER_API_KEY = 'test-api-key';
 process.env.VITE_API_URL = 'http://localhost:3001';
 process.env.NODE_ENV = 'test';
+process.env.VITEST = 'true';
+
+// Dodaję zmienne środowiskowe Supabase dla backendu
+process.env.SUPABASE_URL = 'https://test.supabase.co';
+process.env.SUPABASE_ANON_KEY = 'test-anon-key';
+process.env.JWT_SECRET = 'test-jwt-secret';
+
+// Dodaję zmienne środowiskowe MongoDB dla testów
+process.env.MONGODB_URI = 'mongodb://localhost:27017/healthymeal_test';
+process.env.MONGODB_TEST_URI = 'mongodb://localhost:27017/healthymeal_test';
 
 // Mock dla localStorage
 const localStorageMock = {

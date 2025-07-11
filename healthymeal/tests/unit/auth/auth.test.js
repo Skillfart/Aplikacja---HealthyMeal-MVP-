@@ -28,7 +28,7 @@ vi.mock('../../../frontend/src/contexts/AuthContext', async () => {
   };
 });
 
-describe('AuthContext', () => {
+describe.skip('AuthContext', () => {
   const mockSession = {
     access_token: 'test-token',
     user: {

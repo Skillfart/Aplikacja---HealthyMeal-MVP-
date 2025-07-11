@@ -6,9 +6,28 @@ import { describe, it, expect } from 'vitest';
 // Mock funkcji walidacyjnych
 const validateEmail = (email) => {
   if (!email) return 'Email jest wymagany';
-  // Lepszy regex dla walidacji email
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-  if (!emailRegex.test(email)) return 'Email ma nieprawidłowy format';
+  if (typeof email !== 'string') return 'Email ma nieprawidłowy format';
+  
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const trimmedEmail = email.trim();
+  
+  // Basic regex check
+  if (!emailRegex.test(trimmedEmail)) return 'Email ma nieprawidłowy format';
+  
+  // Additional checks for edge cases
+  // No consecutive dots
+  if (trimmedEmail.includes('..')) return 'Email ma nieprawidłowy format';
+  
+  // No starting or ending dots
+  if (trimmedEmail.startsWith('.') || trimmedEmail.endsWith('.')) return 'Email ma nieprawidłowy format';
+  
+  // Domain part should not start or end with dots
+  const parts = trimmedEmail.split('@');
+  if (parts.length !== 2) return 'Email ma nieprawidłowy format';
+  
+  const domain = parts[1];
+  if (domain.startsWith('.') || domain.endsWith('.')) return 'Email ma nieprawidłowy format';
+  
   return null;
 };
 
