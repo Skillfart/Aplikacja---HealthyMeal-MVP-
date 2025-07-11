@@ -12,11 +12,13 @@ export default defineConfig({
     // Globalne zmienne testowe
     globals: true,
     
-    // Wzorce plików testowych
+    // Wzorce plików testowych - tylko nasze testy
     include: [
-      'tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}',
-      'tests/**/*.test.js',
-      'tests/**/*.spec.js'
+      'tests/unit/**/*.{test,spec}.{js,jsx}',
+      'tests/integration/**/*.{test,spec}.{js,jsx}',
+      'tests/performance/**/*.{test,spec}.{js,jsx}',
+      'tests/e2e/**/*.{test,spec}.{js,jsx}',
+      'tests/*.{test,spec}.{js,jsx}'
     ],
     
     // Wykluczenia
@@ -28,7 +30,9 @@ export default defineConfig({
       '.cache',
       'tests/e2e/**',
       'tests/playwright-report/**',
-      'tests/coverage/**'
+      'tests/coverage/**',
+      'tests/node_modules/**',
+      '**/node_modules/**'
     ],
     
     // Timeout testów
