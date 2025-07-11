@@ -1,0 +1,23 @@
+{
+  "name": "ai-lekcje-healthymeal",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "cd healthymeal && npm run test",
+    "test:unit": "cd healthymeal && npm run test:unit",
+    "test:integration": "cd healthymeal && npm run test:integration",
+    "test:e2e": "cd healthymeal && npm run test:e2e",
+    "test:coverage": "cd healthymeal && npm run test:coverage",
+    "test:all": "cd healthymeal && npm run test:all",
+    "test:performance": "cd healthymeal && npm run test:performance",
+    "build:frontend": "cd healthymeal && npm run build:frontend",
+    "build:backend": "cd healthymeal && npm run build:backend",
+    "start:backend": "cd healthymeal && npm run start:backend",
+    "preview:frontend": "cd healthymeal && npm run preview:frontend",
+    "lint": "cd healthymeal && npm run lint",
+    "install:all": "cd healthymeal && npm install && cd frontend && npm install && cd ../backend && npm install"
+  },
+  "workspaces": [
+    "healthymeal"
+  ]
+} 
