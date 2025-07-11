@@ -134,4 +134,4 @@ describe.skip('AuthContext', () => {
     const { error } = useAuth();
     expect(error).toBe(errorMessage);
   });
-}); 
+});

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { useAuth } from '../../../frontend/src/contexts/AuthContext';
 
 // Mock całego modułu AuthContext zamiast importowania rzeczywistego
 vi.mock('../../../frontend/src/contexts/AuthContext', () => ({
@@ -22,8 +23,6 @@ vi.mock('@supabase/supabase-js', () => ({
 }));
 
 describe('🧪 AuthContext Logic', () => {
-  const { useAuth } = await import('../../../frontend/src/contexts/AuthContext');
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
