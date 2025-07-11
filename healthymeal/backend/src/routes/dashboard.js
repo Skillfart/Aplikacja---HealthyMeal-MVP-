@@ -6,8 +6,8 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    // Pobierz użytkownika
-    const user = await User.findOne({ supabaseId: req.user.id });
+    // Użyj użytkownika z middleware (req.mongoUser)
+    const user = req.mongoUser;
     if (!user) {
       return res.status(404).json({ error: 'Użytkownik nie znaleziony' });
     }
@@ -15,13 +15,15 @@ router.get('/', async (req, res) => {
     // Pobierz ostatnie przepisy użytkownika
     const recentRecipes = await Recipe.find({ author: user._id })
       .sort({ createdAt: -1 })
-      .limit(5)
-      .populate('ingredients.ingredient');
+      .limit(5);
 
     // Pobierz losowy przepis jako przepis dnia
     const recipeCount = await Recipe.countDocuments();
-    const random = Math.floor(Math.random() * recipeCount);
-    const recipeOfDay = await Recipe.findOne().skip(random).populate('ingredients.ingredient');
+    let recipeOfDay = null;
+    if (recipeCount > 0) {
+      const random = Math.floor(Math.random() * recipeCount);
+      recipeOfDay = await Recipe.findOne().skip(random);
+    }
 
     // Przygotuj dane do odpowiedzi
     const dashboardData = {

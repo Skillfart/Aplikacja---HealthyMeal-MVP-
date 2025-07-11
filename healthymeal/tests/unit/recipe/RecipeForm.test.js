@@ -1,13 +1,13 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import RecipeForm from '../../../src/components/RecipeForm';
-import { useAuth } from '../../../src/contexts/AuthContext';
+import NewRecipeForm from '../../../frontend/src/components/NewRecipeForm';
+import { useAuth } from '../../../frontend/src/contexts/AuthContext';
 
 // Mock useAuth hook
-jest.mock('../../../src/contexts/AuthContext', () => ({
+jest.mock('../../../frontend/src/contexts/AuthContext', () => ({
   useAuth: jest.fn()
 }));
 
-describe('RecipeForm', () => {
+describe('NewRecipeForm', () => {
   const mockUser = {
     id: 'user123',
     email: 'test@example.com'
@@ -33,7 +33,7 @@ describe('RecipeForm', () => {
   });
 
   test('renderuje się poprawnie w trybie tworzenia', () => {
-    render(<RecipeForm {...mockHandlers} />);
+    render(<NewRecipeForm {...mockHandlers} />);
 
     expect(screen.getByLabelText(/tytuł/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/składniki/i)).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe('RecipeForm', () => {
   });
 
   test('renderuje się poprawnie w trybie edycji', () => {
-    render(<RecipeForm {...mockHandlers} recipe={mockRecipe} />);
+    render(<NewRecipeForm {...mockHandlers} recipe={mockRecipe} />);
 
     expect(screen.getByLabelText(/tytuł/i)).toHaveValue(mockRecipe.title);
     expect(screen.getByLabelText(/składniki/i)).toHaveValue(mockRecipe.ingredients.join('\n'));
@@ -53,7 +53,7 @@ describe('RecipeForm', () => {
   });
 
   test('waliduje wymagane pola', async () => {
-    render(<RecipeForm {...mockHandlers} />);
+    render(<NewRecipeForm {...mockHandlers} />);
 
     fireEvent.click(screen.getByRole('button', { name: /zapisz/i }));
 
@@ -67,7 +67,7 @@ describe('RecipeForm', () => {
   });
 
   test('wywołuje onSubmit z poprawnymi danymi', async () => {
-    render(<RecipeForm {...mockHandlers} />);
+    render(<NewRecipeForm {...mockHandlers} />);
 
     fireEvent.change(screen.getByLabelText(/tytuł/i), {
       target: { value: mockRecipe.title }
@@ -96,7 +96,7 @@ describe('RecipeForm', () => {
   });
 
   test('wywołuje onCancel po kliknięciu anuluj', () => {
-    render(<RecipeForm {...mockHandlers} />);
+    render(<NewRecipeForm {...mockHandlers} />);
 
     fireEvent.click(screen.getByRole('button', { name: /anuluj/i }));
 
@@ -104,7 +104,7 @@ describe('RecipeForm', () => {
   });
 
   test('formatuje składniki podczas wprowadzania', () => {
-    render(<RecipeForm {...mockHandlers} />);
+    render(<NewRecipeForm {...mockHandlers} />);
 
     const ingredientsInput = screen.getByLabelText(/składniki/i);
 
@@ -116,7 +116,7 @@ describe('RecipeForm', () => {
   });
 
   test('formatuje hashtagi podczas wprowadzania', () => {
-    render(<RecipeForm {...mockHandlers} />);
+    render(<NewRecipeForm {...mockHandlers} />);
 
     const hashtagsInput = screen.getByLabelText(/hashtagi/i);
 
@@ -128,7 +128,7 @@ describe('RecipeForm', () => {
   });
 
   test('obsługuje błędy walidacji składników', async () => {
-    render(<RecipeForm {...mockHandlers} />);
+    render(<NewRecipeForm {...mockHandlers} />);
 
     fireEvent.change(screen.getByLabelText(/składniki/i), {
       target: { value: 'niepoprawny format' }

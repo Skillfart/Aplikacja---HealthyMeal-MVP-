@@ -37,19 +37,31 @@ export const AuthProvider = ({ children }) => {
         
         if (mounted) {
           if (error) throw error;
-          setSession(session);
-          if (session) {
-            console.log('Session data:', {
-              access_token: session.access_token ? '✅ Present' : '❌ Missing',
-              user: session.user ? '✅ Present' : '❌ Missing'
-            });
-            setUser({
-              ...session.user,
-              access_token: session.access_token
-            });
-          } else {
-            setUser(null);
-          }
+                  setSession(session);
+        if (session) {
+          console.log('Session data:', {
+            access_token: session.access_token ? '✅ Present' : '❌ Missing',
+            user: session.user ? '✅ Present' : '❌ Missing'
+          });
+          
+          // Zapisz token do localStorage dla axios interceptorów
+          localStorage.setItem('session', JSON.stringify({
+            access_token: session.access_token,
+            user: session.user
+          }));
+          
+          // Zapisz też do globalnego obiektu window
+          window.supabaseSession = session;
+          
+          setUser({
+            ...session.user,
+            access_token: session.access_token
+          });
+        } else {
+          setUser(null);
+          localStorage.removeItem('session');
+          delete window.supabaseSession;
+        }
         }
       } catch (error) {
         if (mounted) {
@@ -76,12 +88,21 @@ export const AuthProvider = ({ children }) => {
         
         setSession(session);
         if (session) {
+          // Zapisz token do localStorage i window
+          localStorage.setItem('session', JSON.stringify({
+            access_token: session.access_token,
+            user: session.user
+          }));
+          window.supabaseSession = session;
+          
           setUser({
             ...session.user,
             access_token: session.access_token
           });
         } else {
           setUser(null);
+          localStorage.removeItem('session');
+          delete window.supabaseSession;
         }
         setLoading(false);
       }

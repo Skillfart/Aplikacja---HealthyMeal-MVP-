@@ -171,20 +171,34 @@ router.delete('/:id', async (req, res) => {
 // Modyfikuj przepis przez AI
 router.post('/:id/ai-modify', async (req, res) => {
   try {
+    console.log('🔍 AI Modify - Start, user:', req.user?.id, 'recipe:', req.params.id);
+    console.log('🔍 AI Modify - mongoUser:', req.mongoUser ? 'OK' : 'MISSING');
+    
     const recipe = await Recipe.findOne({
       _id: req.params.id,
       author: req.user.id
-    }).populate('ingredients.ingredient');
+    });
 
     if (!recipe) {
+      console.log('❌ AI Modify - Recipe not found');
       return res.status(404).json({ error: 'Przepis nie znaleziony' });
     }
 
+    console.log('✅ AI Modify - Recipe found:', recipe.title);
+
     // Sprawdź czy użytkownik ma dostępne modyfikacje AI
+    if (!req.mongoUser) {
+      console.log('❌ AI Modify - mongoUser is missing');
+      return res.status(400).json({ error: 'Brak danych użytkownika' });
+    }
+
     await req.mongoUser.resetAIUsageIfNeeded();
-    const dailyLimit = process.env.DAILY_AI_LIMIT || 5;
+    const dailyLimit = parseInt(process.env.DAILY_AI_LIMIT) || 5;
+    
+    console.log('🔍 AI Modify - Current usage:', req.mongoUser.aiUsage.count, 'limit:', dailyLimit);
     
     if (req.mongoUser.aiUsage.count >= dailyLimit) {
+      console.log('❌ AI Modify - Daily limit exceeded');
       return res.status(429).json({ 
         error: 'Przekroczono dzienny limit użycia AI',
         current: req.mongoUser.aiUsage.count,
@@ -194,29 +208,35 @@ router.post('/:id/ai-modify', async (req, res) => {
 
     // Pobierz preferencje użytkownika
     const userPreferences = req.mongoUser.preferences;
+    console.log('🔍 AI Modify - User preferences:', userPreferences);
 
     // Modyfikuj przepis przez AI
+    console.log('🔍 AI Modify - Calling modifyRecipeWithAI...');
     const modifiedRecipe = await modifyRecipeWithAI(recipe, userPreferences);
+    console.log('✅ AI Modify - Recipe modified:', modifiedRecipe.title);
 
     // Inkrementuj licznik AI
     req.mongoUser.incrementAiUsage();
     await req.mongoUser.save();
+    console.log('✅ AI Modify - Usage incremented');
 
-    // Zapisz zmodyfikowany przepis jako nowy
+    // Zapisz zmodyfikowany przepis jako nowy (usuń _id żeby uniknąć duplikatu)
+    const { _id, createdAt, updatedAt, __v, ...recipeDataWithoutId } = modifiedRecipe;
+    console.log('🔍 AI Modify - Recipe data keys:', Object.keys(recipeDataWithoutId));
+    console.log('🔍 AI Modify - Creating new recipe without _id');
+    
     const newRecipe = new Recipe({
-      ...modifiedRecipe,
+      ...recipeDataWithoutId,
       author: req.user.id,
-      isModified: true,
-      originalRecipe: recipe._id
+      title: `${modifiedRecipe.title} (AI Modified)`,
+      hashtags: [...(modifiedRecipe.hashtags || []), 'ai-modified']
     });
 
     await newRecipe.save();
-    
-    const populatedNewRecipe = await Recipe.findById(newRecipe._id)
-      .populate('ingredients.ingredient');
+    console.log('✅ AI Modify - New recipe saved:', newRecipe._id);
 
     res.json({
-      recipe: populatedNewRecipe,
+      recipe: newRecipe,
       aiUsage: {
         current: req.mongoUser.aiUsage.count,
         limit: dailyLimit,
@@ -224,7 +244,24 @@ router.post('/:id/ai-modify', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Błąd podczas modyfikacji przepisu przez AI:', error);
+    console.error('❌ AI Modify - Error:', error);
+    console.error('❌ AI Modify - Error stack:', error.stack);
+    console.error('❌ AI Modify - Error message:', error.message);
+    
+    // Sprawdź czy to błąd walidacji
+    if (error.name === 'ValidationError') {
+      console.error('❌ AI Modify - Validation error:', error.errors);
+      return res.status(400).json({ 
+        error: 'Błąd walidacji danych',
+        details: Object.values(error.errors).map(err => err.message)
+      });
+    }
+    
+    // Sprawdź czy to błąd AI
+    if (error.message.includes('AI')) {
+      return res.status(400).json({ error: error.message });
+    }
+    
     res.status(500).json({ error: 'Błąd serwera podczas modyfikacji przepisu przez AI' });
   }
 });

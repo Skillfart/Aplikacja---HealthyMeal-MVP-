@@ -1,5 +1,6 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import RecipeCard from '../../../src/components/RecipeCard';
+import RecipeCard from '../../../frontend/src/components/RecipeCard';
 import { MemoryRouter } from 'react-router-dom';
 
 describe('RecipeCard', () => {
@@ -13,12 +14,12 @@ describe('RecipeCard', () => {
   };
 
   const mockHandlers = {
-    onModify: jest.fn(),
-    onDelete: jest.fn()
+    onModify: vi.fn(),
+    onDelete: vi.fn()
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   test('renderuje się poprawnie z danymi przepisu', () => {
@@ -47,7 +48,7 @@ describe('RecipeCard', () => {
   });
 
   test('wywołuje onDelete po potwierdzeniu usunięcia', () => {
-    window.confirm = jest.fn(() => true);
+    window.confirm = vi.fn(() => true);
 
     render(
       <MemoryRouter>
@@ -63,7 +64,7 @@ describe('RecipeCard', () => {
   });
 
   test('nie wywołuje onDelete po anulowaniu usunięcia', () => {
-    window.confirm = jest.fn(() => false);
+    window.confirm = vi.fn(() => false);
 
     render(
       <MemoryRouter>

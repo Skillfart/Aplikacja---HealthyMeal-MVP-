@@ -3,7 +3,7 @@ import {
   formatInstructions,
   validateRecipe,
   parseHashtags
-} from '../../../src/utils/recipeUtils';
+} from '../../../frontend/src/utils/recipeUtils';
 
 describe('recipeUtils', () => {
   describe('parseIngredients', () => {

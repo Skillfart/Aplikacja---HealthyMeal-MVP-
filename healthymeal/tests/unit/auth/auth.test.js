@@ -1,12 +1,32 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { useAuth } from '../../../src/contexts/AuthContext';
-import { AuthProvider } from '../../../src/contexts/AuthContext';
+import { useAuth } from '../../../frontend/src/contexts/AuthContext';
+import { AuthProvider } from '../../../frontend/src/contexts/AuthContext';
 import { MemoryRouter } from 'react-router-dom';
 
-// Mock useAuth hook
-jest.mock('../../../src/contexts/AuthContext', () => ({
-  useAuth: jest.fn()
+// Mock Supabase
+vi.mock('@supabase/supabase-js', () => ({
+  createClient: vi.fn(() => ({
+    auth: {
+      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
+      onAuthStateChange: vi.fn(() => ({
+        data: { subscription: { unsubscribe: vi.fn() } }
+      })),
+      signInWithPassword: vi.fn(),
+      signUp: vi.fn(),
+      signOut: vi.fn()
+    }
+  }))
 }));
+
+// Mock useAuth hook
+vi.mock('../../../frontend/src/contexts/AuthContext', async () => {
+  const actual = await vi.importActual('../../../frontend/src/contexts/AuthContext');
+  return {
+    ...actual,
+    useAuth: vi.fn()
+  };
+});
 
 describe('AuthContext', () => {
   const mockSession = {
@@ -20,18 +40,18 @@ describe('AuthContext', () => {
   beforeEach(() => {
     useAuth.mockImplementation(() => ({
       session: mockSession,
-      signIn: jest.fn(),
-      signOut: jest.fn(),
+      signIn: vi.fn(),
+      signOut: vi.fn(),
       loading: false,
       error: null
     }));
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
-  test('useAuth hook zwraca poprawny kontekst', () => {
+  it('useAuth hook zwraca poprawny kontekst', () => {
     const { session, signIn, signOut, loading, error } = useAuth();
 
     expect(session).toBe(mockSession);
@@ -41,7 +61,7 @@ describe('AuthContext', () => {
     expect(error).toBeNull();
   });
 
-  test('AuthProvider renderuje się poprawnie z dziećmi', () => {
+  it('AuthProvider renderuje się poprawnie z dziećmi', () => {
     const TestComponent = () => <div>Test Component</div>;
 
     render(
@@ -55,8 +75,8 @@ describe('AuthContext', () => {
     expect(screen.getByText('Test Component')).toBeInTheDocument();
   });
 
-  test('signIn wywołuje się z poprawnymi danymi', async () => {
-    const mockSignIn = jest.fn();
+  it('signIn wywołuje się z poprawnymi danymi', async () => {
+    const mockSignIn = vi.fn();
     useAuth.mockImplementation(() => ({
       session: null,
       signIn: mockSignIn,
@@ -75,8 +95,8 @@ describe('AuthContext', () => {
     expect(mockSignIn).toHaveBeenCalledWith(credentials);
   });
 
-  test('signOut czyści sesję', async () => {
-    const mockSignOut = jest.fn();
+  it('signOut czyści sesję', async () => {
+    const mockSignOut = vi.fn();
     useAuth.mockImplementation(() => ({
       session: mockSession,
       signOut: mockSignOut,
@@ -90,10 +110,10 @@ describe('AuthContext', () => {
     expect(mockSignOut).toHaveBeenCalled();
   });
 
-  test('loading jest true podczas autentykacji', () => {
+  it('loading jest true podczas autentykacji', () => {
     useAuth.mockImplementation(() => ({
       session: null,
-      signIn: jest.fn(),
+      signIn: vi.fn(),
       loading: true,
       error: null
     }));
@@ -102,11 +122,11 @@ describe('AuthContext', () => {
     expect(loading).toBe(true);
   });
 
-  test('error jest ustawiony gdy wystąpi błąd autentykacji', () => {
+  it('error jest ustawiony gdy wystąpi błąd autentykacji', () => {
     const errorMessage = 'Invalid credentials';
     useAuth.mockImplementation(() => ({
       session: null,
-      signIn: jest.fn(),
+      signIn: vi.fn(),
       loading: false,
       error: errorMessage
     }));

@@ -35,7 +35,7 @@ export const useAIUsage = () => {
     
     try {
       setLoading(true);
-      const response = await axios.post('/api/users/increment-ai', null, {
+      const response = await axios.post('/api/users/ai-usage', {}, {
         headers: {
           Authorization: `Bearer ${user.access_token}`
         }

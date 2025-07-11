@@ -70,7 +70,8 @@ const RecipeList = () => {
 
     try {
       setError(null);
-      const response = await axios.post(`/api/recipes/${recipeId}/ai-modify`, null, {
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3031';
+      const response = await axios.post(`${API_BASE}/api/recipes/${recipeId}/ai-modify`, {}, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'
@@ -81,7 +82,7 @@ const RecipeList = () => {
       await incrementUsage();
       
       // Dodaj nowy przepis do listy
-      setRecipes(prev => [response.data, ...prev]);
+      setRecipes(prev => [response.data.recipe, ...prev]);
     } catch (err) {
       console.error('Błąd podczas modyfikacji przepisu:', err);
       if (err.response?.status === 401) {
@@ -109,7 +110,8 @@ const RecipeList = () => {
 
     try {
       setError(null);
-      await axios.delete(`/api/recipes/${recipeId}`, {
+      const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3031';
+      await axios.delete(`${API_BASE}/api/recipes/${recipeId}`, {
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
           'Content-Type': 'application/json'

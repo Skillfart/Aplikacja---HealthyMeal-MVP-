@@ -90,7 +90,7 @@ userSchema.methods.resetAIUsageIfNeeded = function() {
 userSchema.methods.incrementAiUsage = function() {
   this.resetAIUsageIfNeeded();
   
-  const dailyLimit = process.env.DAILY_LIMIT || 10;
+  const dailyLimit = parseInt(process.env.DAILY_AI_LIMIT) || 5;
   
   if (this.aiUsage.count >= dailyLimit) {
     throw new Error('Przekroczono dzienny limit użycia AI');

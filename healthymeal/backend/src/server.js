@@ -4,6 +4,8 @@ import cors from 'cors';
 import userRoutes from './routes/users.js';
 import dashboardRoutes from './routes/dashboard.js';
 import recipesRoutes from './routes/recipes.js';
+import aiRoutes from './routes/ai.js';
+import authRoutes from './routes/auth.js';
 
 // Konfiguracja Mongoose
 //mongoose.set('suppressReservedKeysWarning', true);
@@ -88,10 +90,27 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1);
   });
 
+// Middleware do logowania wszystkich requestów
+app.use((req, res, next) => {
+  console.log(`🌐 ${req.method} ${req.url} - ${new Date().toISOString()}`);
+  next();
+});
+
+// Health check endpoint dla CI/CD
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
 // Routy
+app.use('/api/auth', authRoutes); // Publiczne endpointy autoryzacji
 app.use('/api/users', authMiddleware, userRoutes);
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
 app.use('/api/recipes', authMiddleware, recipesRoutes);
+app.use('/api/ai', authMiddleware, aiRoutes);
 
 app.listen(port, () => {
   console.log(`Serwer uruchomiony na porcie ${port}`);

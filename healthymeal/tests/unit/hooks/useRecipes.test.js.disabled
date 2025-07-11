@@ -1,0 +1,137 @@
+import { renderHook, act } from '@testing-library/react-hooks';
+import { useRecipes } from '../../../frontend/src/hooks/useRecipes';
+import axios from 'axios';
+
+// Mock axios
+jest.mock('axios');
+
+describe('useRecipes', () => {
+  const mockRecipes = [
+    {
+      _id: '1',
+      title: 'Recipe 1',
+      ingredients: ['Ingredient 1'],
+      instructions: 'Instructions 1',
+      hashtags: ['healthy']
+    },
+    {
+      _id: '2',
+      title: 'Recipe 2',
+      ingredients: ['Ingredient 2'],
+      instructions: 'Instructions 2',
+      hashtags: ['quick']
+    }
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('zwraca początkowy stan', () => {
+    const { result } = renderHook(() => useRecipes());
+
+    expect(result.current.recipes).toEqual([]);
+    expect(result.current.loading).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  test('pobiera przepisy pomyślnie', async () => {
+    axios.get.mockResolvedValueOnce({ data: { recipes: mockRecipes } });
+
+    const { result, waitForNextUpdate } = renderHook(() => useRecipes());
+
+    await waitForNextUpdate();
+
+    expect(result.current.recipes).toEqual(mockRecipes);
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  test('obsługuje błąd podczas pobierania przepisów', async () => {
+    const errorMessage = 'Failed to fetch recipes';
+    axios.get.mockRejectedValueOnce(new Error(errorMessage));
+
+    const { result, waitForNextUpdate } = renderHook(() => useRecipes());
+
+    await waitForNextUpdate();
+
+    expect(result.current.recipes).toEqual([]);
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBe(errorMessage);
+  });
+
+  test('filtruje przepisy po hashtagu', async () => {
+    axios.get.mockResolvedValueOnce({ data: { recipes: mockRecipes } });
+
+    const { result, waitForNextUpdate } = renderHook(() => useRecipes());
+
+    await waitForNextUpdate();
+
+    act(() => {
+      result.current.filterByHashtag('healthy');
+    });
+
+    expect(result.current.recipes).toEqual([mockRecipes[0]]);
+  });
+
+  test('wyszukuje przepisy po tytule', async () => {
+    axios.get.mockResolvedValueOnce({ data: { recipes: mockRecipes } });
+
+    const { result, waitForNextUpdate } = renderHook(() => useRecipes());
+
+    await waitForNextUpdate();
+
+    act(() => {
+      result.current.searchRecipes('Recipe 1');
+    });
+
+    expect(result.current.recipes).toEqual([mockRecipes[0]]);
+  });
+
+  test('resetuje filtry', async () => {
+    axios.get.mockResolvedValueOnce({ data: { recipes: mockRecipes } });
+
+    const { result, waitForNextUpdate } = renderHook(() => useRecipes());
+
+    await waitForNextUpdate();
+
+    act(() => {
+      result.current.filterByHashtag('healthy');
+    });
+
+    expect(result.current.recipes).toEqual([mockRecipes[0]]);
+
+    act(() => {
+      result.current.resetFilters();
+    });
+
+    expect(result.current.recipes).toEqual(mockRecipes);
+  });
+
+  test('sortuje przepisy po dacie', async () => {
+    const recipesWithDates = mockRecipes.map((recipe, index) => ({
+      ...recipe,
+      createdAt: new Date(2024, 0, index + 1)
+    }));
+
+    axios.get.mockResolvedValueOnce({ data: { recipes: recipesWithDates } });
+
+    const { result, waitForNextUpdate } = renderHook(() => useRecipes());
+
+    await waitForNextUpdate();
+
+    act(() => {
+      result.current.sortByDate('desc');
+    });
+
+    expect(result.current.recipes[0]._id).toBe('2');
+    expect(result.current.recipes[1]._id).toBe('1');
+
+    act(() => {
+      result.current.sortByDate('asc');
+    });
+
+    expect(result.current.recipes[0]._id).toBe('1');
+    expect(result.current.recipes[1]._id).toBe('2');
+  });
+}); 
