@@ -2,9 +2,9 @@ name: 🧪 CI/CD Tests Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   workflow_dispatch:
   schedule:
     # Nightly tests at 2 AM UTC
