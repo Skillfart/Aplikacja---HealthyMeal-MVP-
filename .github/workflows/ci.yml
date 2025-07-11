@@ -32,14 +32,16 @@ jobs:
 
       - name: 📦 Install dependencies
         run: |
-          npm ci
-          npm run install:all
+          cd healthymeal
+          npm install
+          cd frontend && npm install
+          cd ../backend && npm install
 
       - name: 🔍 Lint code
-        run: npm run lint --if-present
+        run: cd healthymeal && npm run lint --if-present
 
       - name: 🧪 Run unit tests
-        run: npm run test:unit
+        run: cd healthymeal && npm run test:unit
         env:
           NODE_ENV: test
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL_TEST }}
@@ -47,13 +49,13 @@ jobs:
           VITE_OPENROUTER_API_KEY: test-key
 
       - name: 🔗 Run integration tests
-        run: npm run test:integration
+        run: cd healthymeal && npm run test:integration
         env:
           NODE_ENV: test
           MONGODB_URI: mongodb://localhost:27017/healthymeal-test
 
       - name: 📊 Generate coverage report
-        run: npm run test:coverage
+        run: cd healthymeal && npm run test:coverage
 
       - name: 📈 Upload coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -102,14 +104,17 @@ jobs:
 
       - name: 📦 Install dependencies
         run: |
-          npm ci
-          npm run install:all
+          cd healthymeal
+          npm install
+          cd frontend && npm install
+          cd ../backend && npm install
 
       - name: 🎭 Install Playwright browsers
         run: cd healthymeal && npx playwright install --with-deps
 
       - name: 🚀 Start backend server
         run: |
+          cd healthymeal
           npm run build:backend --if-present
           npm run start:backend &
           sleep 10
@@ -120,6 +125,7 @@ jobs:
 
       - name: 🌐 Start frontend server
         run: |
+          cd healthymeal
           npm run build:frontend --if-present
           npm run preview:frontend &
           sleep 10
@@ -132,7 +138,7 @@ jobs:
           cd healthymeal && npx wait-on http://localhost:3001/health --timeout 60000
 
       - name: 🎭 Run E2E tests
-        run: npm run test:e2e
+        run: cd healthymeal && npm run test:e2e
         env:
           BASE_URL: http://localhost:5173
 
@@ -170,11 +176,13 @@ jobs:
 
       - name: 📦 Install dependencies
         run: |
-          npm ci
-          npm run install:all
+          cd healthymeal
+          npm install
+          cd frontend && npm install
+          cd ../backend && npm install
 
       - name: ⚡ Run performance tests
-        run: npm run test:performance --if-present
+        run: cd healthymeal && npm run test:performance --if-present
 
       - name: 📊 Performance benchmarks
         run: |
@@ -203,16 +211,18 @@ jobs:
 
       - name: 📦 Install dependencies
         run: |
-          npm ci
-          npm run install:all
+          cd healthymeal
+          npm install
+          cd frontend && npm install
+          cd ../backend && npm install
 
       - name: 🏗️ Build frontend
-        run: npm run build:frontend --if-present
+        run: cd healthymeal && npm run build:frontend --if-present
         env:
           NODE_ENV: production
 
       - name: 🏗️ Build backend
-        run: npm run build:backend --if-present
+        run: cd healthymeal && npm run build:backend --if-present
         env:
           NODE_ENV: production
 
@@ -286,11 +296,13 @@ jobs:
 
       - name: 📦 Install dependencies
         run: |
-          npm ci
-          npm run install:all
+          cd healthymeal
+          npm install
+          cd frontend && npm install
+          cd ../backend && npm install
 
       - name: 🩺 Full test suite
-        run: npm run test:all
+        run: cd healthymeal && npm run test:all
 
       - name: 📊 Detailed coverage report
         run: |
