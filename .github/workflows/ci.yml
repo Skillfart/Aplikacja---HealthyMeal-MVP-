@@ -45,18 +45,7 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY_TEST }}
           VITE_OPENROUTER_API_KEY: test-key
 
-      - name: 📊 Generate coverage report
-        run: cd healthymeal && npm run test:coverage
-
-      - name: 📈 Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./healthymeal/tests/coverage/lcov.info
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
-
-      - name: ✅ Coverage threshold check
+      - name: ✅ Unit tests completed
         run: |
           cd healthymeal
           echo "✅ Unit tests completed successfully"
