@@ -6,17 +6,34 @@ console.log('Konfiguracja Supabase:');
 console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
 console.log('SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Ustawiony' : '❌ Brak');
 
+// W trybie testowym nie przerywamy procesu
+const isTestMode = process.env.NODE_ENV === 'test' || process.env.VITEST;
+
 if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
   console.error('❌ Brak konfiguracji Supabase. Sprawdź zmienne środowiskowe:');
   console.error('- SUPABASE_URL:', process.env.SUPABASE_URL || '❌ Brak');
   console.error('- SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✅ Ustawiony' : '❌ Brak');
-  process.exit(1);
+  
+  if (!isTestMode) {
+    process.exit(1);
+  }
 }
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+// Tworzymy mocka w testach lub prawdziwy client
+let supabase;
+if (isTestMode && (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY)) {
+  // Mock dla testów
+  supabase = {
+    auth: {
+      getUser: () => ({ data: { user: null }, error: new Error('Mock: brak konfiguracji') })
+    }
+  };
+} else {
+  supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY
+  );
+}
 
 export const authMiddleware = async (req, res, next) => {
   try {

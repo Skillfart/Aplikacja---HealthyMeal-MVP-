@@ -6,7 +6,9 @@ import { describe, it, expect } from 'vitest';
 // Mock funkcji walidacyjnych
 const validateEmail = (email) => {
   if (!email) return 'Email jest wymagany';
-  if (!/\S+@\S+\.\S+/.test(email)) return 'Email ma nieprawidłowy format';
+  // Lepszy regex dla walidacji email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  if (!emailRegex.test(email)) return 'Email ma nieprawidłowy format';
   return null;
 };
 
@@ -52,7 +54,7 @@ const validateIngredients = (ingredients) => {
   
   for (const ingredient of ingredients) {
     if (!ingredient.name) return 'Nazwa składnika jest wymagana';
-    if (!ingredient.quantity) return 'Ilość składnika jest wymagana';
+    if (ingredient.quantity === undefined || ingredient.quantity === null) return 'Ilość składnika jest wymagana';
     if (typeof ingredient.quantity !== 'number' || ingredient.quantity <= 0) {
       return 'Ilość musi być liczbą większą od 0';
     }
